@@ -10,7 +10,9 @@
 # Authors:
 # Daniel Lezcano <daniel.lezcano@free.fr>
 # Ramez Hanna <rhanna@informatiq.org>
- 
+# OTHER AUTHOR
+# Cam Cope <ccope@brightcove.com>
+
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
 # License as published by the Free Software Foundation; either
@@ -29,8 +31,10 @@
 arch=$(arch)
 cache_base=/var/cache/lxc/centos/$arch
 default_path=/var/lib/lxc
-root_password=password
- 
+root_password=vagrant
+lxc_network_type=veth
+lxc_network_link=lxcbr0
+
 # is this centos?
 [ -f /etc/redhat-release ] && is_centos=true
  
@@ -50,10 +54,12 @@ configure_centos()
 DEVICE=eth0
 BOOTPROTO=dhcp
 ONBOOT=yes
+NM_CONTROLLED=no
 TYPE=Ethernet
 USERCTL=yes
 PEERDNS=yes
 IPV6INIT=no
+DHCP_HOSTNAME="${name}"
 EOF
  
     # set the dns
@@ -72,25 +78,32 @@ EOF
  
     # set minimal hosts
     cat <<EOF > $rootfs_path/etc/hosts
-127.0.0.1 localhost $name
+127.0.0.1 localhost
+127.0.1.1 $name
 ::1 localhost localhost.localdomain localhost6 localhost6.localdomain6
 EOF
- 
+
+    # create lxc compatibility init script
+    if [ "$release" = "5" ]; then 
+        cat <<EOF > $rootfs_path/etc/rc.d/lxc.sysinit
+#! /bin/bash
+rm -f /etc/mtab /var/run/*.{pid,lock} /var/lock/subsys/*
+rm -rf {/,/var}/tmp/* 
+echo "/dev/root               /                       rootfs   defaults        0 0" > /etc/mtab
+exit 0
+EOF
+        chmod 755 $rootfs_path/etc/rc.d/lxc.sysinit
+        sed -i 's|si::sysinit:/etc/rc.d/rc.sysinit|si::bootwait:/etc/rc.d/lxc.sysinit|'  $rootfs_path/etc/inittab
+        sed -i 's|^1:|co:2345:respawn:/sbin/mingetty console\n1:|' $rootfs_path/etc/inittab
+        sed -i 's|^\([56]:\)|#\1|' $rootfs_path/etc/inittab
+    fi
     sed -i 's|.sbin.start_udev||' ${rootfs_path}/etc/rc.sysinit
     sed -i 's|.sbin.start_udev||' ${rootfs_path}/etc/rc.d/rc.sysinit
-    # don't mount devpts, for pete's sake
-    sed -i 's/^.*dev.pts.*$/#\0/' ${rootfs_path}/etc/rc.sysinit
-    sed -i 's/^.*dev.pts.*$/#\0/' ${rootfs_path}/etc/rc.d/rc.sysinit
- 
-    sed -i 's/^.*dev.pts.*$/#\0/' ${rootfs_path}/etc/rc.d/rc.sysinit
-    sed -i 's/^.*dev.pts.*$/#\0/' ${rootfs_path}/etc/rc.d/rc.sysinit
-    sed -i 's/^.*dev.pts.*$/#\0/' ${rootfs_path}/etc/rc.d/rc.sysinit
- 
+
     sed -i 's/^#baseurl/baseurl/g' ${rootfs_path}/etc/yum.repos.d/CentOS-Base.repo
     sed -i "s/\$releasever/$release.$releaseminor/g" ${rootfs_path}/etc/yum.repos.d/CentOS-Base.repo
     sed -i '115,126s/^/#/' ${rootfs_path}/etc/rc.d/init.d/halt
  
-    chroot ${rootfs_path} chkconfig udev-post off
     chroot ${rootfs_path} chkconfig network on
  
     dev_path="${rootfs_path}/dev"
@@ -115,26 +128,7 @@ EOF
 
     echo "setting root passwd to $root_password"
     echo "root:$root_password" | chroot $rootfs_path chpasswd
- 
-    # specifying this in the initial packages doesn't always work.
-#    echo "installing centos-release package"
-#    if [ ! -f ${rootfs_path}/etc/resolv.conf ]; then
-#      cp /etc/resolv.conf ${rootfs_path}/etc/resolv.conf
-#      remove_resolv=1
-#    fi
-#    chroot ${rootfs_path} rpm --rebuilddb
-#    chroot ${rootfs_path} yum --releasever=${release} -y install centos-release
-#    if [ ! -z $remove_resolv ]; then
-#      rm ${rootfs_path}/etc/resolv.conf
-#    fi
 
-    # silence some needless startup errors
-    touch ${rootfs_path}/etc/fstab
- 
-    # give us a console on /dev/console
-    sed -i 's/ACTIVE_CONSOLES=.*$/ACTIVE_CONSOLES="\/dev\/console \/dev\/tty[1-4]"/' \
-    ${rootfs_path}/etc/sysconfig/init
- 
     return 0
 }
  
@@ -153,7 +147,7 @@ download_centos()
     echo "Downloading centos minimal ..."
     YUM="yum --installroot $INSTALL_ROOT -y --nogpgcheck"
     PKG_LIST="yum initscripts passwd rsyslog vim-minimal dhclient chkconfig"
-    PKG_LIST="$PKG_LIST rootfiles policycoreutils centos-release openssh-server avahi"
+    PKG_LIST="$PKG_LIST rootfiles policycoreutils centos-release openssh-server openssh-clients sudo curl"
     MIRRORLIST_URL="http://mirrorlist.centos.org/?release=$release.$releaseminor&arch=$arch&repo=os"
 
     FOUND_MIRRORS=$(curl -s -S -f "$MIRRORLIST_URL")
@@ -190,6 +184,7 @@ download_centos()
     rpm --root $INSTALL_ROOT --initdb
     rpm --root $INSTALL_ROOT -ivh $INSTALL_ROOT/centos-release-$release-$releaseminor.centos.$arch.rpm
     $YUM install $PKG_LIST
+    cp $INSTALL_ROOT/root/.rpmdb/Packages $INSTALL_ROOT/var/lib/rpm/
     chroot $INSTALL_ROOT rm -f /var/lib/rpm/__*
     chroot $INSTALL_ROOT rpm --rebuilddb
  
@@ -212,14 +207,19 @@ copy_centos()
 #    cp -a $cache/rootfs-$arch $rootfs_path || return 1
     # i prefer rsync (no reason really)
     mkdir -p $rootfs_path
-    rsync -a $cache/rootfs/ $rootfs_path/
+    rsync -a $cache/rootfs/ $rootfs_path/ || return 1
     return 0
 }
  
 update_centos()
 {
-#    chroot $cache/rootfs yum -y update
-     echo "Updates disabled"
+#    YUM="chroot $cache/rootfs yum -y --nogpgcheck"
+#    $YUM update
+#    if [ $? -ne 0 ]; then
+#        return 1
+#    fi
+#    $YUM clean packages
+    echo "Updates disabled"
 }
  
 install_centos()
@@ -273,7 +273,10 @@ lxc.tty = 4
 lxc.pts = 1024
 lxc.rootfs = $rootfs_path
 lxc.mount  = $config_path/fstab
- 
+
+
+
+
 # uncomment the next line to run the container unconfined:
 #lxc.aa_profile = unconfined
  
@@ -294,12 +297,23 @@ lxc.cgroup.devices.allow = c 136:* rwm
 lxc.cgroup.devices.allow = c 5:2 rwm
 # rtc
 lxc.cgroup.devices.allow = c 254:0 rwm
+#fuse
+lxc.cgroup.devices.allow = c 10:229 rwm
+#tun
+lxc.cgroup.devices.allow = c 10:200 rwm
+#full
+lxc.cgroup.devices.allow = c 1:7 rwm
+#hpet
+lxc.cgroup.devices.allow = c 10:228 rwm
+#kvm
+lxc.cgroup.devices.allow = c 10:232 rwm
 EOF
- 
+
     cat <<EOF > $config_path/fstab
 proc            proc         proc    nodev,noexec,nosuid 0 0
 sysfs           sys          sysfs defaults  0 0
 EOF
+
     if [ $? -ne 0 ]; then
         echo "Failed to add configuration"
         return 1
@@ -342,15 +356,16 @@ Mandatory args:
 Optional args:
   -p,--path         path to where the container rootfs will be created, defaults to /var/lib/lxc. The container config will go under /var/lib/lxc in that case
   -c,--clean        clean the cache
-  -R,--release      Centos release for the new container. if the host is Fedora, then it will defaultto the host's release.
+  -r,--release      Centos release for the new container. if the host is Fedora, then it will defaultto the host's release.
   -m,--release-minor Minor release number for the new containar
-  -A,--arch         NOT USED YET. Define what arch the container will be [i686,x86_64]
+  -a,--arch         NOT USED YET. Define what arch the container will be [i686,x86_64]
+  -S,--auth-key
   -h,--help         print this help
 EOF
 return 0
 }
  
-options=$(getopt -o hp:n:cR:m: -l help,path:,name:,clean,release:,releaseminor: -- "$@")
+options=$(getopt -o hp:n:cr:m: -l help,path:,name:,clean,release:,releaseminor: -- "$@")
 if [ $? -ne 0 ]; then
     usage $(basename $0)
     exit 1
@@ -363,9 +378,11 @@ case "$1" in
   -h|--help)      usage $0 && exit 0;;
   -p|--path)      path=$2; shift 2;;
   -n|--name)      name=$2; shift 2;;
-  -c|--clean)     clean=$2; shift 2;;
-  -R|--release)   release=$2; shift 2;;
+  -F|--flush-cache)     clean=$2; shift 2;;
+  -r|--release)   release=$2; shift 2;;
   -m|--releaseminor) releaseminor=$2; shift 2;;
+  -a|--arch)      arch=$2; shift 2;;
+  -S|--auth-key)  auth_key=$2; shift 2;;
   --)             shift 1; break ;;
   *)              break ;;
 esac
@@ -401,13 +418,13 @@ if [ -z "$release" ]; then
     if [ "$is_centos" ]; then
         release=$(cat /etc/centos-release |awk '/^Fedora/ {print $3}')
     else
-        echo "This is not a centos host and release missing, defaulting to 5.9. use -R|--release to specify release"
+        echo "This is not a centos host and release missing, defaulting to 5.10. use -R|--release to specify release"
         release=5
     fi
 fi
  
 if [ -z "$releaseminor" ]; then
-    releaseminor=9
+    releaseminor=10
 fi
  
 if [ "$(id -u)" != "0" ]; then
@@ -418,7 +435,7 @@ fi
  
 rootfs_path=$path/rootfs
 config_path=$default_path/$name
-cache=$cache_base/$release.$releaseminor
+cache=$cache_base/$release
  
 revert()
 {
