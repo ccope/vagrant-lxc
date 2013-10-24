@@ -1,5 +1,5 @@
 #!/bin/bash
-
+#set -x
 #
 # template script for generating CentOS container for LXC
 #
@@ -9,7 +9,7 @@
 # Authors:
 # Daniel Lezcano <daniel.lezcano@free.fr>
 # Ramez Hanna <rhanna@informatiq.org>
-# OTHER AUTHOR
+# OTHERS
 # Cam Cope <ccope@brightcove.com>
 
 # This library is free software; you can redistribute it and/or
@@ -32,30 +32,17 @@ if [ -r /etc/default/lxc ]; then
     . /etc/default/lxc
 fi
 
- 
-#Configurations
-arch=$(arch)
-cache_base=/var/cache/lxc/centos/$arch
-default_path=/var/lib/lxc
-root_password=vagrant
-lxc_network_type=veth
-lxc_network_link=lxcbr0
-
-# is this centos?
-[ -f /etc/redhat-release ] && is_centos=true
- 
-if [ "$arch" = "i686" ]; then
-arch=i386
-fi
- 
 configure_centos()
 {
- 
+    rootfs=$1
+    hostname=$2
+    release=$3
+
     # disable selinux in centos
     mkdir -p $rootfs/selinux
     echo 0 > $rootfs/selinux/enforce
- 
-    # configure the network using the dhcp
+
+   # configure the network using the dhcp
     cat <<EOF > ${rootfs}/etc/sysconfig/network-scripts/ifcfg-eth0
 DEVICE=eth0
 BOOTPROTO=dhcp
@@ -65,7 +52,7 @@ TYPE=Ethernet
 USERCTL=yes
 PEERDNS=yes
 IPV6INIT=no
-DHCP_HOSTNAME="${name}"
+DHCP_HOSTNAME="${hostname}"
 EOF
  
     # set the dns
@@ -74,18 +61,18 @@ EOF
 nameserver 8.8.8.8
 nameserver 8.8.4.4
 END
- 
- 
+
+
     # set the hostname
     cat <<EOF > ${rootfs}/etc/sysconfig/network
 NETWORKING=yes
-HOSTNAME=${name}
+HOSTNAME=${hostname}
 EOF
  
     # set minimal hosts
     cat <<EOF > $rootfs/etc/hosts
 127.0.0.1 localhost
-127.0.1.1 $name
+127.0.1.1 $hostname
 ::1 localhost localhost.localdomain localhost6 localhost6.localdomain6
 EOF
 
@@ -133,16 +120,64 @@ EOF
     mknod -m 666 ${dev_path}/ptmx c 5 2
 
     echo "setting root passwd to $root_password"
-    echo "root:$root_password" | chroot $rootfs chpasswd
+    echo "root:vagrant" | chroot $rootfs chpasswd
+
+    if [ -z "$bindhome" ]; then
+        chroot $rootfs useradd --create-home -s /bin/bash vagrant
+        echo "vagrant:vagrant" | chroot $rootfs chpasswd
+    fi
 
     return 0
 }
- 
+
+# finish setting up the user in the container by injecting ssh key and
+# adding sudo group membership.
+# passed-in user is either 'vagrant' or the user to bind in from host.
+finalize_user()
+{
+    user=$1
+
+    group="wheel"
+
+    chroot $rootfs adduser ${user} $group >/dev/null 2>&1 || true
+
+    if [ -n "$auth_key" -a -f "$auth_key" ]; then
+        u_path="/home/${user}/.ssh"
+        root_u_path="$rootfs/$u_path"
+
+        mkdir -p $root_u_path
+        cp $auth_key "$root_u_path/authorized_keys"
+        chroot $rootfs chown -R ${user}: "$u_path"
+
+        echo "Inserted SSH public key from $auth_key into /home/${user}/.ssh/authorized_keys"
+    fi
+    return 0
+}
+
+cleanup()
+{
+    rm -rf $cache/partial-$arch
+    rm -rf $cache/rootfs-$arch
+}
+
+suggest_flush()
+{
+    echo "Container upgrade failed.  The container cache may be out of date,"
+    echo "in which case flushing the case (see -F in the hep output) may help."
+}
+
 download_centos()
 {
- 
+    cache=$1
+    arch=$2
+    release=$3
+    releaseminor=$4
+
+    packages="yum initscripts passwd rsyslog vim-minimal dhclient chkconfig rootfiles"
+    packages="$packages policycoreutils  centos-release openssh-server openssh-clients sudo curl"
+    trap cleanup EXIT SIGHUP SIGINT SIGTERM
     # check the mini centos was not already downloaded
-    INSTALL_ROOT=$cache/partial
+    INSTALL_ROOT=$cache/partial-$arch
     mkdir -p $INSTALL_ROOT
     if [ $? -ne 0 ]; then
         echo "Failed to create '$INSTALL_ROOT' directory"
@@ -150,12 +185,10 @@ download_centos()
     fi
 
     # download a mini centos into a cache
-    echo "Downloading centos minimal ..."
+    echo "Downloading centos $release.$releaseminor minimal ..."
     YUM="yum --installroot $INSTALL_ROOT -y --nogpgcheck"
-    PKG_LIST="yum initscripts passwd rsyslog vim-minimal dhclient chkconfig"
-    PKG_LIST="$PKG_LIST rootfiles policycoreutils centos-release openssh-server openssh-clients sudo curl"
-    MIRRORLIST_URL="http://mirrorlist.centos.org/?release=$release.$releaseminor&arch=$arch&repo=os"
 
+    MIRRORLIST_URL="http://mirrorlist.centos.org/?release=$release.$releaseminor&arch=$arch&repo=os"
     FOUND_MIRRORS=$(curl -s -S -f "$MIRRORLIST_URL")
     AVAIL_MIRRORS="${FOUND_MIRRORS} http://vault.centos.org/$release.$releaseminor/os/$arch"
 
@@ -182,16 +215,17 @@ download_centos()
     break
     done
     if [ $DOWNLOAD_OK != yes ]; then
-        echo "Aborting"
+        echo "Failed to download the rootfs, aborting"
         return 1
     fi
  
     mkdir -p $INSTALL_ROOT/var/lib/rpm
     rpm --root $INSTALL_ROOT --initdb
-    rpm --root $INSTALL_ROOT -ivh $INSTALL_ROOT/centos-release-$release-$releaseminor.centos.$arch.rpm
-    $YUM install $PKG_LIST
+    rpm --root $INSTALL_ROOT -ivh --nodeps $INSTALL_ROOT/centos-release-$release-$releaseminor.centos.$arch.rpm
+    $YUM install $packages
     cp $INSTALL_ROOT/root/.rpmdb/Packages $INSTALL_ROOT/var/lib/rpm/
     chroot $INSTALL_ROOT rm -f /var/lib/rpm/__*
+    rm $INSTALL_ROOT/centos-release-$release-$releaseminor.centos.$arch.rpm
     chroot $INSTALL_ROOT rpm --rebuilddb
  
     if [ $? -ne 0 ]; then
@@ -199,95 +233,111 @@ download_centos()
         return 1
     fi
 
-    mv "$INSTALL_ROOT" "$cache/rootfs"
-    echo "Download complete."
- 
+    mv "$INSTALL_ROOT" "$1/rootfs-$arch"
+    trap EXIT
+    trap SIGINT
+    trap SIGTERM
+    trap SIGHUP
+    echo "Download complete"
     return 0
 }
- 
+
 copy_centos()
 {
- 
+    cache=$1
+    arch=$2
+    rootfs=$3
+
     # make a local copy of the minicentos
-    echo -n "Copying rootfs to $rootfs ..."
-#    cp -a $cache/rootfs-$arch $rootfs || return 1
-    # i prefer rsync (no reason really)
+    echo "Copying rootfs to $rootfs ..."
     mkdir -p $rootfs
-    rsync -a $cache/rootfs/ $rootfs/ || return 1
+    rsync -a $cache/rootfs-$arch/ $rootfs/ || return 1
     return 0
 }
- 
-update_centos()
-{
-#    YUM="chroot $cache/rootfs yum -y --nogpgcheck"
-#    $YUM update
-#    if [ $? -ne 0 ]; then
-#        return 1
-#    fi
-#    $YUM clean packages
-    echo "Updates disabled"
-}
- 
+
 install_centos()
 {
+    rootfs=$1
+    release=$2
+    releaseminor=$3
+    flushcache=$4
+    cache="/var/cache/lxc/centos/$release.$releaseminor"
     mkdir -p /var/lock/subsys/
+
     (
         flock -x 200
         if [ $? -ne 0 ]; then
             echo "Cache repository is busy."
             return 1
         fi
-     
-        echo "Checking cache download in $cache/rootfs ... "
-        if [ ! -e "$cache/rootfs" ]; then
-            download_centos
+
+
+        if [[ $flushcache -eq 1 ]]; then
+            echo "Flushing cache..."
+            rm -rf "$cache/partial-$arch"
+            rm -rf "$cache/rootfs-$arch"
+        fi
+
+        echo "Checking cache download in $cache/rootfs-$arch ... "
+        if [ ! -e "$cache/rootfs-$arch" ]; then
+            download_centos $cache $arch $release $releaseminor
             if [ $? -ne 0 ]; then
-                echo "Failed to download 'centos base'"
+                echo "Failed to download 'centos $release.$releaseminor base'"
                 return 1
             fi
-        else
-            echo "Cache found. Updating..."
-            update_centos
-            if [ $? -ne 0 ]; then
-                echo "Failed to update 'centos base', continuing with last known good cache"
-            else
-                echo "Update finished"
-            fi
         fi
-    
-        echo "Copy $cache/rootfs to $rootfs ... "
-        copy_centos
+
+        echo "Copy $cache/rootfs-$arch to $rootfs ... "
+        copy_centos $cache $arch $rootfs
         if [ $? -ne 0 ]; then
             echo "Failed to copy rootfs"
             return 1
         fi
-    
+
         return 0
-     
-        ) 200>/var/lock/subsys/lxc
- 
+
+    ) 200>/var/lock/subsys/lxc
+
     return $?
 }
- 
+
 copy_configuration()
 {
- 
-    mkdir -p $config_path
-    cat <<EOF >> $config_path/config
+    path=$1
+    rootfs=$2
+    name=$3
+    arch=$4
+    release=$5
+    releaseminor=$6
+
+    if [ $arch = "i386" ]; then
+        arch="i686"
+    fi
+
+    ttydir=""
+    if [ -f $rootfs/etc/rc.d/lxc.sysinit ]; then
+        ttydir=" lxc"
+    fi
+
+    cat <<EOF >> $path/config
 lxc.utsname = $name
+
+lxc.devttydir =$ttydir
 lxc.tty = 4
 lxc.pts = 1024
 lxc.rootfs = $rootfs
-lxc.mount  = $config_path/fstab
-
-
-
+lxc.mount  = $path/fstab
+lxc.arch = $arch
+lxc.cap.drop = sys_module mac_admin
+lxc.pivotdir = lxc_putold
 
 # uncomment the next line to run the container unconfined:
 #lxc.aa_profile = unconfined
- 
-#cgroups
+
 lxc.cgroup.devices.deny = a
+# Allow any mknod (but not using the node)
+lxc.cgroup.devices.allow = c *:* m
+lxc.cgroup.devices.allow = b *:* m
 # /dev/null and zero
 lxc.cgroup.devices.allow = c 1:3 rwm
 lxc.cgroup.devices.allow = c 1:5 rwm
@@ -315,7 +365,7 @@ lxc.cgroup.devices.allow = c 10:228 rwm
 lxc.cgroup.devices.allow = c 10:232 rwm
 EOF
 
-    cat <<EOF > $config_path/fstab
+    cat <<EOF > $path/fstab
 proc            proc         proc    nodev,noexec,nosuid 0 0
 sysfs           sys          sysfs defaults  0 0
 EOF
@@ -327,122 +377,36 @@ EOF
 
     return 0
 }
- 
-clean()
+
+do_bindhome()
 {
- 
-    if [ ! -e $cache ]; then
-        exit 0
-    fi
+    rootfs=$1
+    user=$2
 
-    # lock, so we won't purge while someone is creating a repository
-    (
-        flock -x 200
-        if [ $? != 0 ]; then
-            echo "Cache repository is busy."
-            exit 1
-        fi
+    # copy /etc/passwd, /etc/shadow, and /etc/group entries into container
+    pwd=`getent passwd $user` || { echo "Failed to copy password entry for $user"; false; }
+    echo $pwd >> $rootfs/etc/passwd
 
-        echo -n "Purging the download cache for Centos-$release-$releaseminor..."
-        rm --preserve-root --one-file-system -rf $cache && echo "Done." || exit 1
-        exit 0
+    shad=`getent shadow $user`
+    echo "$shad" >> $rootfs/etc/shadow
 
-    ) 200>/var/lock/subsys/lxc
+    # bind-mount the user's path into the container's /home
+    h=`getent passwd $user | cut -d: -f 6`
+    mkdir -p $rootfs/$h
+
+    # use relative path in container
+    h2=${h#/}
+    while [ ${h2:0:1} = "/" ]; do
+        h2=${h2#/}
+    done
+    echo "$h $h2 none bind 0 0" >> $path/fstab
+
+    # Make sure the group exists in container
+    grp=`echo $pwd | cut -d: -f 4`  # group number for $user
+    grpe=`getent group $grp` || return 0  # if host doesn't define grp, ignore in container
+    chroot $rootfs getent group "$grpe" || echo "$grpe" >> $rootfs/etc/group
 }
- 
-usage()
-{
-cat <<EOF
-usage:
-$1 -n|--name=<container_name>
-[-p|--path=<path>] [-c|--clean] [-R|--release=<Centos_release>] [-A|--arch=<arch of the container>]
-[-h|--help]
-Mandatory args:
-  -n,--name         container name, used to as an identifier for that container from now on
-Optional args:
-  -p,--path         path to where the container rootfs will be created, defaults to /var/lib/lxc. The container config will go under /var/lib/lxc in that case
-  -c,--clean        clean the cache
-  -r,--release      Centos release for the new container. if the host is Fedora, then it will defaultto the host's release.
-  -m,--release-minor Minor release number for the new containar
-  -a,--arch         NOT USED YET. Define what arch the container will be [i686,x86_64]
-  -S,--auth-key
-  -h,--help         print this help
-EOF
-return 0
-}
- 
-options=$(getopt -o hp:n:cr:m: -l help,path:,name:,clean,release:,releaseminor: -- "$@")
-if [ $? -ne 0 ]; then
-    usage $(basename $0)
-    exit 1
-fi
-eval set -- "$options"
- 
-while true
-do
-case "$1" in
-  -h|--help)      usage $0 && exit 0;;
-  -p|--path)      path=$2; shift 2;;
-  -n|--name)      name=$2; shift 2;;
-  -F|--flush-cache)     clean=$2; shift 2;;
-  -r|--release)   release=$2; shift 2;;
-  -m|--releaseminor) releaseminor=$2; shift 2;;
-  -a|--arch)      arch=$2; shift 2;;
-  -S|--auth-key)  auth_key=$2; shift 2;;
-  --)             shift 1; break ;;
-  *)              break ;;
-esac
-done
- 
-if [ ! -z "$clean" -a -z "$path" ]; then
-    clean || exit 1
-    exit 0
-fi
- 
-needed_pkgs=""
-type yum >/dev/null 2>&1
-if [ $? -ne 0 ]; then
-    needed_pkgs="yum $needed_pkgs"
-fi
- 
-type curl >/dev/null 2>&1
-if [ $? -ne 0 ]; then
-    needed_pkgs="curl $needed_pkgs"
-fi
- 
-if [ -n "$needed_pkgs" ]; then
-    echo "Missing commands: $needed_pkgs"
-    echo "Please install these using \"sudo apt-get install $needed_pkgs\""
-    exit 1
-fi
 
-if [ -z "$path" ]; then
-    path=$default_path
-fi
- 
-if [ -z "$release" ]; then
-    if [ "$is_centos" ]; then
-        release=$(cat /etc/centos-release |awk '/^Fedora/ {print $3}')
-    else
-        echo "This is not a centos host and release missing, defaulting to 5.10. use -R|--release to specify release"
-        release=5
-    fi
-fi
- 
-if [ -z "$releaseminor" ]; then
-    releaseminor=10
-fi
- 
-if [ "$(id -u)" != "0" ]; then
-echo "This script should be run as 'root'"
-exit 1
-fi
- 
- 
-rootfs=$path/rootfs
-config_path=$default_path/$name
-cache=$cache_base/$release
- 
 revert()
 {
     echo "Interrupted, so cleaning up"
@@ -453,30 +417,144 @@ revert()
     echo "exiting..."
     exit 1
 }
- 
+
 trap revert SIGHUP SIGINT SIGTERM
- 
-copy_configuration
+
+#Configurations
+arch=$(arch)
+default_path=/var/lib/lxc
+root_password=vagrant
+bindhome=
+debug=
+flushcache=
+
+usage()
+{
+    cat <<EOF
+usage:
+$1 -n|--name=<container_name>
+[-p|--path=<path>] [-c|--clean] [-R|--release=<Centos_release>] [-A|--arch=<arch of the container>]
+[-h|--help]
+Mandatory args:
+  -n,--name         container name, used to as an identifier for that container from now on
+Optional args:
+  -p,--path         path to where the container rootfs will be created, defaults to /var/lib/lxc. The container config will go under /var/lib/lxc in that case
+  -F,--flush-cache  clean the cache
+  -r,--release      Centos release for the new container.
+  -m,--release-minor Minor release number for the new containar
+  -a,--arch         NOT USED YET. Define what arch the container will be [i686,x86_64]
+  -S,--auth-key
+  -b,--bindhome
+  -d,--debug
+  -h,--help         print this help
+EOF
+return 0
+}
+
+options=$(getopt -o a:b:hp:r:m:n:FS:d -l arch:,bindhome:,help,path:,release:,releaseminor:,name:,flush-cache,auth-key:,debug -- "$@")
 if [ $? -ne 0 ]; then
-    echo "failed write configuration file"
+    usage $(basename $0)
     exit 1
 fi
- 
-install_centos
+eval set -- "$options"
+
+while true
+do
+    case "$1" in
+    -h|--help)      usage $0 && exit 0;;
+    -p|--path)      path=$2; shift 2;;
+    -n|--name)      name=$2; shift 2;;
+    -F|--flush-cache) flushcache=1; shift 1;;
+    -r|--release)   release=$2; shift 2;;
+    -m|--releaseminor) releaseminor=$2; shift 2;;
+    -b|--bindhome)  bindhome=$2; shift 2;;
+    -a|--arch)      arch=$2; shift 2;;
+    -S|--auth-key)  auth_key=$2; shift 2;;
+    -d|--debug)     debug=1; shift 1;;
+    --)             shift 1; break ;;
+        *)              break ;;
+    esac
+done
+
+if [[ $debug -eq 1 ]]; then
+    set -x
+fi
+
+if [ -n "$bindhome" ]; then
+    pwd=`getent passwd $bindhome`
+    if [ $? -ne 0 ]; then
+        echo "Error: no password entry found for $bindhome"
+        exit 1
+    fi
+fi
+
+
+if [ "$arch" == "i686" ]; then
+    arch=i386
+fi
+
+needed_pkgs=""
+type yum >/dev/null 2>&1
+if [ $? -ne 0 ]; then
+    needed_pkgs="yum librpm2 librpmbuild2 librpmio2 librpmsign0 libsqlite0 python-rpm python-sqlite python-sqlitecachec python-support python-urlgrabber rpm rpm-common rpm2cpio debootstrap bridge-utils $needed_pkgs"
+fi
+
+type curl >/dev/null 2>&1
+if [ $? -ne 0 ]; then
+    needed_pkgs="curl $needed_pkgs"
+fi
+
+if [ -n "$needed_pkgs" ]; then
+    echo "Missing commands: $needed_pkgs"
+    echo "Please install these using \"sudo apt-get install $needed_pkgs\""
+    exit 1
+fi
+
+if [ -z "$path" ]; then
+    path=$default_path
+fi
+
+if [ -z "$release" ]; then
+    echo "Release missing, defaulting to 5.10. use -r|--release to specify release"
+    release=5
+    releaseminor=10
+fi
+
+if [ "$(id -u)" != "0" ]; then
+    echo "This script should be run as 'root'"
+    exit 1
+fi
+
+rootfs=$path/rootfs
+
+install_centos $rootfs $release $releaseminor $flushcache
 if [ $? -ne 0 ]; then
     echo "failed to install centos"
     exit 1
 fi
- 
-configure_centos
+
+configure_centos $rootfs $name $release $releaseminor
 if [ $? -ne 0 ]; then
-    echo "failed to configure centos for a container"
+    echo "failed to configure centos $release.$releaseminor for a container"
     exit 1
 fi
- 
- 
-if [ ! -z $clean ]; then
-    clean || exit 1
-    exit 0
+
+copy_configuration $path $rootfs $name $arch $release
+if [ $? -ne 0 ]; then
+    echo "failed write configuration file"
+    exit 1
 fi
-echo "container rootfs and config created"
+
+if [ -n "$bindhome" ]; then
+    do_bindhome $rootfs $bindhome
+    finalize_user $bindhome
+else
+    finalize_user vagrant
+fi
+
+echo ""
+echo "##"
+echo "# The default user is 'vagrant' with password 'vagrant'!"
+echo "# Use the 'sudo' command to run tasks as root in the container."
+echo "##"
+echo ""
