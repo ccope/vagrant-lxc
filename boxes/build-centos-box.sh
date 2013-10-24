@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# set -x
+#set -x
 set -e
 # Script used to build centos base vagrant-lxc containers, currently limited to
 # host's arch
@@ -22,6 +22,12 @@ NOW=$(date -u)
 DISTRO="centos"
 RELEASE=${1:-"5"}
 ARCH=$(arch)
+if [ ${ARCH} == "x86_64" ]
+then
+    ARCH="x86-64"
+else
+    ARCH=$ARCH
+fi
 PKG=vagrant-lxc-${DISTRO}-${RELEASE}-${ARCH}-${TODAY}.box
 WORKING_DIR=/tmp/vagrant-lxc-${DISTRO}-${RELEASE}-${ARCH}
 VAGRANT_KEY="ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEA6NF8iallvQVp22WDkTkyrtvp9eWW6A8YVr+kz4TjGYe7gHzIw+niNltGEFHzD8+v1I2YJ6oXevct1YeS0o9HZyN1Q9qgCgzUFtdOKLv6IedplqoPkcmF0aYet2PkEDo3MlTBckFXPITAMzF8dJSIFo9D8HfdOV0IAdx4O7PtixWKn5y2hMNG0zQPyUecp4pzC6kivAIhyfHilFR61RGL+GPXQ2MWZWFYbAGjyiYJnAmCP3NOTd0jMZEnDkbUvxhMmBYSdETk1rRgm+R4LOzFUGaHqHDLKLX+FIPKcF96hrucXzcWyLbIbEgE98OHlnVYCzRdK8jlqm8tehUc9c9WhQ== vagrant insecure public key"
@@ -30,8 +36,8 @@ ROOTFS=/var/lib/lxc/${DISTRO}-${RELEASE}-${ARCH}-base/rootfs
 # Path to files bundled with the box
 CWD=`readlink -f .`
 LXC_TEMPLATE=${CWD}/centos/lxc-template
-LXC_CONF=${CWD}/centos/lxc.conf
-METATADA_JSON=${CWD}/centos/metadata.json
+LXC_CONF=${CWD}/common/lxc.conf
+METATADA_JSON=${CWD}/common/metadata.json
 
 # Set up a working dir
 mkdir -p $WORKING_DIR
@@ -41,20 +47,22 @@ if [ -f "${WORKING_DIR}/${PKG}" ]; then
   exit 1
 fi
 
-##################################################################################
-# 1 - Create the base container
-if ${ARCH} == "x86_64"
-    TMPARCH = "64"
+if [ -f "/tmp/CENTOS5_64.tar.xz" ]; then
+    echo "Centos FAI image already exists"
 else
-    TMPARCH = ARCH
+    echo "Downloading image..."
+    wget http://fai-project.org/download/basefiles/CENTOS5_64.tar.xz -O /tmp/CENTOS5_64.tar.xz
 fi
 
-if $(lxc-ls | grep -q "${DISTRO}-${RELEASE}-${TMPARCH}-base"); then
-  echo "Base container already exists, please remove it with \`lxc-destroy -n ${RELEASE}-base\`!"
+##################################################################################
+# 1 - Create the base container
+
+if $(lxc-ls | grep -q "${DISTRO}-${RELEASE}-${ARCH}-base"); then
+  echo "Base container already exists, please remove it with \`lxc-destroy -n ${DISTRO}-${RELEASE}-${ARCH}-base\`!"
   exit 1
 else
-  export SUITE=${DISTRO}-${RELEASE}-${TMPARCH}
-  lxc-create -n ${DISTRO}-${RELEASE}-${TMPARCH}-base -t centos
+  export SUITE=${DISTRO}-${RELEASE}-${ARCH}
+  lxc-create -n ${DISTRO}-${RELEASE}-${ARCH}-base -t centos #-- -d -F
 fi
 
 ######################################
@@ -62,8 +70,8 @@ fi
 
 ##################################################################################
 # 3 - Prepare vagrant user
-chroot ${ROOTFS} useradd -m vagrant -G wheel
-echo -n 'vagrant:vagrant' | chroot ${ROOTFS} chpasswd
+#chroot ${ROOTFS} useradd -m vagrant -G wheel
+#echo -n 'vagrant:vagrant' | chroot ${ROOTFS} chpasswd
 
 ##################################################################################
 # 4 - Setup SSH access and passwordless sudo
@@ -74,14 +82,12 @@ echo $VAGRANT_KEY > ${ROOTFS}/home/vagrant/.ssh/authorized_keys
 chroot ${ROOTFS} chown -R vagrant: /home/vagrant/.ssh
 
 # Enable passwordless sudo for users under the "sudo" group
-sed -i -e \
-      's/%sudo\s\+ALL=(ALL\(:ALL\)\?)\s\+ALL/%sudo ALL=NOPASSWD:ALL/g' \
-      ${ROOTFS}/etc/sudoers
+echo "%wheel        ALL=(ALL)       NOPASSWD: ALL" >> ${ROOTFS}/etc/sudoers
 
 ##################################################################################
 # 5 - Add some goodies and update packages
 
-YUM="chroot $cache/rootfs yum -y --nogpgcheck"
+YUM="chroot ${ROOTFS} yum -y --nogpgcheck"
 $YUM update
 if [ $? -ne 0 ]; then
     return 1

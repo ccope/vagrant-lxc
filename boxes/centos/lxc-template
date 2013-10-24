@@ -9,7 +9,7 @@
 # Authors:
 # Daniel Lezcano <daniel.lezcano@free.fr>
 # Ramez Hanna <rhanna@informatiq.org>
-# OTHERS
+# OTHER AUTHOR
 # Cam Cope <ccope@brightcove.com>
 
 # This library is free software; you can redistribute it and/or
@@ -120,11 +120,11 @@ EOF
     mknod -m 666 ${dev_path}/ptmx c 5 2
 
     echo "setting root passwd to $root_password"
-    echo "root:vagrant" | chroot $rootfs chpasswd
+    echo "root:vagrant" | chroot $rootfs /usr/sbin/chpasswd
 
     if [ -z "$bindhome" ]; then
-        chroot $rootfs useradd --create-home -s /bin/bash vagrant
-        echo "vagrant:vagrant" | chroot $rootfs chpasswd
+        chroot $rootfs useradd --create-home -s /bin/bash vagrant -G wheel
+        echo "vagrant:vagrant" | chroot $rootfs /usr/sbin/chpasswd
     fi
 
     return 0
@@ -139,7 +139,7 @@ finalize_user()
 
     group="wheel"
 
-    chroot $rootfs adduser ${user} $group >/dev/null 2>&1 || true
+    chroot $rootfs gpasswd -a ${user} $group >/dev/null 2>&1 || true
 
     if [ -n "$auth_key" -a -f "$auth_key" ]; then
         u_path="/home/${user}/.ssh"
@@ -173,7 +173,7 @@ download_centos()
     release=$3
     releaseminor=$4
 
-    packages="yum initscripts passwd rsyslog vim-minimal dhclient chkconfig rootfiles"
+    packages="yum initscripts passwd rsyslog vim-minimal dhclient chkconfig rootfilesi shadow-utils"
     packages="$packages policycoreutils  centos-release openssh-server openssh-clients sudo curl"
     trap cleanup EXIT SIGHUP SIGINT SIGTERM
     # check the mini centos was not already downloaded
@@ -183,50 +183,9 @@ download_centos()
         echo "Failed to create '$INSTALL_ROOT' directory"
         return 1
     fi
-
-    # download a mini centos into a cache
-    echo "Downloading centos $release.$releaseminor minimal ..."
-    YUM="yum --installroot $INSTALL_ROOT -y --nogpgcheck"
-
-    MIRRORLIST_URL="http://mirrorlist.centos.org/?release=$release.$releaseminor&arch=$arch&repo=os"
-    FOUND_MIRRORS=$(curl -s -S -f "$MIRRORLIST_URL")
-    AVAIL_MIRRORS="${FOUND_MIRRORS} http://vault.centos.org/$release.$releaseminor/os/$arch"
-
-    DOWNLOAD_OK=no
-    for MIRROR_URL in $AVAIL_MIRRORS; do
-    if [ $? -ne 0 ] || [ -z "$MIRROR_URL" ]; then
-        echo "Failed to get a mirror"
-        continue
-    fi
-    if [ $release = "6" ]; then
-        PACKAGE_NAME=`wget -q -O - ${MIRROR_URL}/Packages/ | grep centos-release-${release}.${releaseminor} | sed -r 's/.+rpm">//g' | sed -r 's/<.+//g'`
-        RELEASE_URL="$MIRROR_URL/Packages/${PACKAGE_NAME}"
-    else
-        PACKAGE_NAME=`wget -q -O - ${MIRROR_URL}/CentOS/ | grep centos-release-${release}.${releaseminor} | sed -r 's/.+rpm">//g' | sed -r 's/<.+//g'`
-        RELEASE_URL="$MIRROR_URL/CentOS/${PACKAGE_NAME}"
-    fi
-    echo "Fetching from $RELEASE_URL"
-    curl -f "$RELEASE_URL" > $INSTALL_ROOT/centos-release-$release-$releaseminor.centos.$arch.rpm
-    if [ $? -ne 0 ]; then
-        echo "Failed to download centos release rpm"
-        continue
-    fi
-    DOWNLOAD_OK=yes
-    break
-    done
-    if [ $DOWNLOAD_OK != yes ]; then
-        echo "Failed to download the rootfs, aborting"
-        return 1
-    fi
- 
-    mkdir -p $INSTALL_ROOT/var/lib/rpm
-    rpm --root $INSTALL_ROOT --initdb
-    rpm --root $INSTALL_ROOT -ivh --nodeps $INSTALL_ROOT/centos-release-$release-$releaseminor.centos.$arch.rpm
-    $YUM install $packages
-    cp $INSTALL_ROOT/root/.rpmdb/Packages $INSTALL_ROOT/var/lib/rpm/
-    chroot $INSTALL_ROOT rm -f /var/lib/rpm/__*
-    rm $INSTALL_ROOT/centos-release-$release-$releaseminor.centos.$arch.rpm
-    chroot $INSTALL_ROOT rpm --rebuilddb
+    tar xvf /tmp/CENTOS5_64.tar.xz -C $INSTALL_ROOT
+    chroot $INSTALL_ROOT yum -y install centos-release-$release-$releaseminor.el5.centos $packages
+    chroot $INSTALL_ROOT yum -y update
  
     if [ $? -ne 0 ]; then
         echo "Failed to download the rootfs, aborting."
@@ -316,7 +275,7 @@ copy_configuration()
 
     ttydir=""
     if [ -f $rootfs/etc/rc.d/lxc.sysinit ]; then
-        ttydir=" lxc"
+        ttydir="lxc"
     fi
 
     cat <<EOF >> $path/config
@@ -539,7 +498,7 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-copy_configuration $path $rootfs $name $arch $release
+copy_configuration $path $rootfs $name $arch $release $releaseminor
 if [ $? -ne 0 ]; then
     echo "failed write configuration file"
     exit 1
