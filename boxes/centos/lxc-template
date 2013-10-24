@@ -96,6 +96,8 @@ EOF
     sed -i 's/^#baseurl/baseurl/g' ${rootfs}/etc/yum.repos.d/CentOS-Base.repo
     sed -i "s/\$releasever/$release.$releaseminor/g" ${rootfs}/etc/yum.repos.d/CentOS-Base.repo
     sed -i '115,126s/^/#/' ${rootfs}/etc/rc.d/init.d/halt
+
+    sed -i 's/Defaults    requiretty//g' ${rootfs}/etc/sudoers
  
     chroot ${rootfs} chkconfig network on
  
@@ -173,8 +175,8 @@ download_centos()
     release=$3
     releaseminor=$4
 
-    packages="yum initscripts passwd rsyslog vim-minimal dhclient chkconfig rootfilesi shadow-utils"
-    packages="$packages policycoreutils  centos-release openssh-server openssh-clients sudo curl"
+    packages="yum initscripts passwd rsyslog vim-minimal dhclient chkconfig rootfiles shadow-utils"
+    packages="$packages policycoreutils centos-release openssh-server openssh-clients sudo curl vixie-cron which"
     trap cleanup EXIT SIGHUP SIGINT SIGTERM
     # check the mini centos was not already downloaded
     INSTALL_ROOT=$cache/partial-$arch
