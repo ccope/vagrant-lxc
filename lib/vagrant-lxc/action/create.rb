@@ -11,11 +11,13 @@ module Vagrant
           container_name.gsub!(/[^-a-z0-9_]/i, "")
           container_name << "-#{Time.now.to_i}"
 
+          config = env[:machine].provider_config
+
           env[:machine].provider.driver.create(
             container_name,
             env[:lxc_template_src],
             env[:lxc_template_config],
-            env[:lxc_template_opts]
+            env[:lxc_template_opts].merge!(config.lxc_template_options)
           )
 
           env[:machine].id = container_name
