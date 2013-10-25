@@ -3,12 +3,19 @@
 set -e
 
 rootfs=$1
-
+version=${2:-"latest"}
 echo "installing chef"
-cat > $rootfs/tmp/install-chef.sh << EOF
+if version == "latest"
+	cat > $rootfs/tmp/install-chef.sh << EOF
 #!/bin/sh
 curl -L https://www.opscode.com/chef/install.sh -k | sudo bash
 EOF
+else
+	cat > $rootfs/tmp/install-chef.sh << EOF
+#!/bin/sh
+curl -L https://www.opscode.com/chef/install.sh -k | sudo bash -s -- -v ${version}
+EOF
+fi
 chmod +x $rootfs/tmp/install-chef.sh
 chroot $rootfs /tmp/install-chef.sh
 
