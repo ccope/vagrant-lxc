@@ -15,9 +15,10 @@ module Vagrant
 
           env[:machine].provider.driver.create(
             container_name,
+            config.lxc_template_options,
             env[:lxc_template_src],
             env[:lxc_template_config],
-            env[:lxc_template_opts].merge!(config.lxc_template_options)
+            env[:lxc_template_opts]
           )
 
           env[:machine].id = container_name

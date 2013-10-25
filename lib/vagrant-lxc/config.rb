@@ -17,7 +17,7 @@ module Vagrant
 
       def initialize
         @customizations = []
-        @lxc_template_options = {}
+        @lxc_template_options = []
         @sudo_wrapper   = UNSET_VALUE
       end
 
@@ -38,7 +38,7 @@ module Vagrant
 
       # custom code to add support for lvm
       def lxc_create_options(key, value)
-        @lxc_template_options[key] = value
+        @lxc_template_options << [key, value]
       end
 
       def finalize!

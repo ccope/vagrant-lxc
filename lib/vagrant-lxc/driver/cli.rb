@@ -44,7 +44,7 @@ module Vagrant
           end
         end
 
-        def create(template, config_file, template_opts = {})
+        def create(template, lxc_template_options, config_file, template_opts = {})
           if config_file
             config_opts = ['-f', config_file]
           end
@@ -53,6 +53,7 @@ module Vagrant
           extra.unshift '--' unless extra.empty?
 
           run :create,
+              *(lxc_template_options.to_a.flatten),
               '--template', template,
               '--name',     @name,
               *(config_opts),
