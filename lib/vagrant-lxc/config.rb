@@ -6,6 +6,9 @@ module Vagrant
       # @return [Array]
       attr_reader :customizations
 
+      # custom code to pass user-specified options to lxc-create
+      attr_reader :lxc_template_options
+
       # A String that points to a file that acts as a wrapper for sudo commands.
       #
       # This allows us to have a single entry when whitelisting NOPASSWD commands
@@ -14,6 +17,7 @@ module Vagrant
 
       def initialize
         @customizations = []
+        @lxc_template_options = {}
         @sudo_wrapper   = UNSET_VALUE
       end
 
@@ -30,6 +34,11 @@ module Vagrant
       # @param [String] value Configuration value to override
       def customize(key, value)
         @customizations << [key, value]
+      end
+
+      # custom code to add support for lvm
+      def lxc_template_options(key, value)
+        @lxc_template_options[key] = value
       end
 
       def finalize!
