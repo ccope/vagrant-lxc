@@ -62,7 +62,7 @@ if $(lxc-ls | grep -q "${DISTRO}-${RELEASE}-${ARCH}-base"); then
   exit 1
 else
   export SUITE=${DISTRO}-${RELEASE}-${ARCH}
-  lxc-create -n ${DISTRO}-${RELEASE}-${ARCH}-base -t centos #-- -d -F
+  lxc-create -n ${DISTRO}-${RELEASE}-${ARCH}-base -t centos -- -d -F
 fi
 
 ######################################
@@ -127,7 +127,7 @@ tar --numeric-owner -czf /tmp/vagrant-lxc-${DISTRO}-${RELEASE}-${ARCH}/rootfs.ta
 
 # Prepare package contents
 cd $WORKING_DIR
-cp $LXC_TEMPLATE .
+cp $LXC_TEMPLATE.ubuntu-modified ./lxc-template
 cp $LXC_CONF .
 cp $METATADA_JSON .
 chmod +x lxc-template
