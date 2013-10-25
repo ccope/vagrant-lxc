@@ -37,7 +37,7 @@ module Vagrant
       end
 
       # custom code to add support for lvm
-      def lxc_template_options(key, value)
+      def lxc_create_options(key, value)
         @lxc_template_options[key] = value
       end
 
