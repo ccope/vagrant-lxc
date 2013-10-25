@@ -54,6 +54,11 @@ module Vagrant
         end
       end
 
+      def clone(existing_container_name, new_container_name)
+        @logger.debug "Cloning container..."
+        @cli.clone(existing_container_name, new_container_name)
+      end
+
       def share_folders(folders)
         folders.each do |folder|
           guestpath = rootfs_path.join(folder[:guestpath].gsub(/^\//, ''))

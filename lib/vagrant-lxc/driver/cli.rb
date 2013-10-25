@@ -60,6 +60,12 @@ module Vagrant
               *extra
         end
 
+        def clone(existing_container_name, new_container_name)
+          run :clone,
+              '-o', existing_container_name,
+              '-n', new_container_name
+        end
+
         def destroy
           run :destroy, '--name', @name
         end
