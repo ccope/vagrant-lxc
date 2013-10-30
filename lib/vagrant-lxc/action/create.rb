@@ -18,12 +18,10 @@ module Vagrant
           end
 
           # example Vagrantfile snippit:
-          #config.create_clone = true
-          #config.existing_container = "foobar"
-          #config.new_container_name = "bazlol"
+          #config.existing_container_name = "foobar"
 
           if env[:existing_container_name]
-            env[:machine].provider.driver.clone(env[:existing_container], container_name)
+            env[:machine].provider.driver.clone(env[:existing_container_name], container_name)
             env[:machine].id = container_name
             @app.call env
           end
