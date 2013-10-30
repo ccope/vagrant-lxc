@@ -42,7 +42,7 @@ module Vagrant
       end
 
       def mac_address
-        @mac_address ||= base_path.join('config').read.match(/^lxc\.network\.hwaddr\s+=\s+(.+)$/)[1]
+        @mac_address ||= base_path.join('config').read.match(/^lxc\.network\.hwaddr\s*+=\s*+(.+)$/)[1]
       end
 
       def create(name, lxc_template_options, template_path, config_file, template_options = {})
