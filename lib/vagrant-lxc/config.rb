@@ -18,11 +18,15 @@ module Vagrant
       # A String that names the container to clone from
       attr_accessor :existing_container_name
 
+      # A String that forces an explicit name
+      attr_accessor :explicit_name
+
       def initialize
         @existing_container_name = UNSET_VALUE
         @customizations = []
         @lxc_template_options = []
         @sudo_wrapper   = UNSET_VALUE
+        @explicit_name = UNSET_VALUE
       end
 
       # Customize the container by calling `lxc-start` with the given
@@ -48,6 +52,7 @@ module Vagrant
       def finalize!
         @sudo_wrapper = nil if @sudo_wrapper == UNSET_VALUE
         @existing_container_name = nil if @existing_container_name == UNSET_VALUE
+        @explicit_name = nil if @explicit_name == UNSET_VALUE
       end
 
       def validate(machine)
