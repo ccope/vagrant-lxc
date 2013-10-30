@@ -15,7 +15,11 @@ module Vagrant
       # on /etc/sudoers
       attr_accessor :sudo_wrapper
 
+      # A String that names the container to clone from
+      attr_accessor :existing_container_name
+
       def initialize
+        @existing_container_name = UNSET_VALUE
         @customizations = []
         @lxc_template_options = []
         @sudo_wrapper   = UNSET_VALUE
@@ -43,6 +47,7 @@ module Vagrant
 
       def finalize!
         @sudo_wrapper = nil if @sudo_wrapper == UNSET_VALUE
+        @existing_container_name = nil if @existing_container_name == UNSET_VALUE
       end
 
       def validate(machine)
