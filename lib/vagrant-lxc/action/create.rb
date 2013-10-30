@@ -9,8 +9,8 @@ module Vagrant
         def call(env)
 
           config = env[:machine].provider_config
-          if env[:explicit_name]
-            container_name = env[:machine].name
+          if config.explicit_name
+            container_name = env[:machine].name.to_s
           else
             container_name = "#{env[:root_path].basename.to_s}_#{env[:machine].name}"
             container_name.gsub!(/[^-a-z0-9_]/i, "")
@@ -20,8 +20,8 @@ module Vagrant
           # example Vagrantfile snippit:
           #config.existing_container_name = "foobar"
 
-          if env[:existing_container_name]
-            env[:machine].provider.driver.clone(env[:existing_container_name], container_name)
+          if config.existing_container_name
+            env[:machine].provider.driver.clone(config.existing_container_name, container_name)
             env[:machine].id = container_name
             @app.call env
           end
