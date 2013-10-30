@@ -62,6 +62,7 @@ module Vagrant
 
         def clone(existing_container_name, name)
           run :clone,
+              '-s',
               '-o', existing_container_name,
               '-n', @name
         end
