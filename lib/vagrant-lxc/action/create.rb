@@ -24,18 +24,17 @@ module Vagrant
             env[:machine].provider.driver.clone(config.existing_container_name, container_name)
             env[:machine].id = container_name
             @app.call env
+          else
+            env[:machine].provider.driver.create(
+              container_name,
+              config.lxc_template_options,
+              env[:lxc_template_src],
+              env[:lxc_template_config],
+              env[:lxc_template_opts])
+            env[:machine].id = container_name
+            @app.call env
           end
 
-          env[:machine].provider.driver.create(
-            container_name,
-            config.lxc_template_options,
-            env[:lxc_template_src],
-            env[:lxc_template_config],
-            env[:lxc_template_opts])
-
-          env[:machine].id = container_name
-
-          @app.call env
         end
       end
     end
