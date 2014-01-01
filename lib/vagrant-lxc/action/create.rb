@@ -7,12 +7,12 @@ module Vagrant
         end
 
         def call(env)
-
           config = env[:machine].provider_config
-          if config.explicit_name
+
+          if config.static_name
             container_name = env[:machine].name.to_s
           else
-            container_name = "#{env[:root_path].basename.to_s}_#{env[:machine].name}"
+            container_name = "#{env[:root_path].basename}_#{env[:machine].name}"
             container_name.gsub!(/[^-a-z0-9_]/i, "")
             container_name << "-#{Time.now.to_i}"
           end
