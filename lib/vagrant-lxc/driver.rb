@@ -17,14 +17,18 @@ module Vagrant
       CONTAINERS_PATH = '/var/lib/lxc'
 
       attr_reader :container_name,
-                  :customizations
+                  :customizations,
+                  :backingstore,
+                  :backingstore_options
 
       def initialize(container_name, sudo_wrapper, cli = nil)
-        @container_name = container_name
-        @sudo_wrapper   = sudo_wrapper
-        @cli            = cli || CLI.new(sudo_wrapper, container_name)
-        @logger         = Log4r::Logger.new("vagrant::provider::lxc::driver")
-        @customizations = []
+        @container_name       = container_name
+        @sudo_wrapper         = sudo_wrapper
+        @cli                  = cli || CLI.new(sudo_wrapper, container_name)
+        @logger               = Log4r::Logger.new("vagrant::provider::lxc::driver")
+        @customizations       = []
+        @backingstore        = "none"
+        @backingstore_options = []
       end
 
       def validate!
@@ -47,12 +51,12 @@ module Vagrant
         @sudo_wrapper.run('cat', base_path.join('config').to_s)
       end
 
-      def create(name, template_path, config_file, template_options = {})
+      def create(name, backingstore, backingstore_options, template_path, config_file, template_options = {})
         @cli.name = @container_name = name
 
         import_template(template_path) do |template_name|
           @logger.debug "Creating container..."
-          @cli.create template_name, config_file, template_options
+          @cli.create template_name, backingstore, backingstore_options, config_file, template_options
         end
       end
 

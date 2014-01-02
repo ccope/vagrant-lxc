@@ -7,12 +7,16 @@ module Vagrant
         end
 
         def call(env)
+          config = env[:machine].provider_config
+
           container_name = "#{env[:root_path].basename}_#{env[:machine].name}"
           container_name.gsub!(/[^-a-z0-9_]/i, "")
           container_name << "-#{Time.now.to_i}"
 
           env[:machine].provider.driver.create(
             container_name,
+            config.backingstore,
+            config.backingstore_options,
             env[:lxc_template_src],
             env[:lxc_template_config],
             env[:lxc_template_opts]
