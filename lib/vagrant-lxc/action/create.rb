@@ -7,8 +7,10 @@ module Vagrant
         end
 
         def call(env)
-          if env[:machine].provider_config.static_name
-            container_name = env[:machine].name.to_s
+          config = env[:machine].provider_config
+
+          if config.static_name
+            container_name = env[:machine].name
           else
             container_name = "#{env[:root_path].basename}_#{env[:machine].name}"
             container_name.gsub!(/[^-a-z0-9_]/i, "")
