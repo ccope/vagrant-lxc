@@ -19,9 +19,11 @@ module Vagrant
       attr_accessor :sudo_wrapper
 
       # A String that names the container to clone from
-      attr_accessor :existing_container_name
+      def clone_container_from(name)
+        @existing_container_name = name
+      end
 
-      # A String that sets a static name
+      # A String that sets the name as static
       attr_accessor :static_name
 
       def initialize
