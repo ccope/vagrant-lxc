@@ -18,15 +18,17 @@ module Vagrant
 
       attr_reader :container_name,
                   :customizations,
-                  :lxc_template_options
+                  :backingstore,
+                  :backingstore_options
 
       def initialize(container_name, sudo_wrapper, cli = nil)
-        @container_name = container_name
-        @sudo_wrapper   = sudo_wrapper
-        @cli            = cli || CLI.new(sudo_wrapper, container_name)
-        @logger         = Log4r::Logger.new("vagrant::provider::lxc::driver")
-        @customizations = []
-        @lxc_template_options = []
+        @container_name       = container_name
+        @sudo_wrapper         = sudo_wrapper
+        @cli                  = cli || CLI.new(sudo_wrapper, container_name)
+        @logger               = Log4r::Logger.new("vagrant::provider::lxc::driver")
+        @customizations       = []
+        @backingstore        = "none"
+        @backingstore_options = []
       end
 
       def validate!
@@ -45,12 +47,12 @@ module Vagrant
         @mac_address ||= base_path.join('config').read.match(/^lxc\.network\.hwaddr\s*+=\s*+(.+)$/)[1]
       end
 
-      def create(name, lxc_template_options, template_path, config_file, template_options = {})
+      def create(name, backingstore, backingstore_options, template_path, config_file, template_options = {})
         @cli.name = @container_name = name
 
         import_template(template_path) do |template_name|
           @logger.debug "Creating container..."
-          @cli.create template_name, lxc_template_options, config_file, template_options
+          @cli.create template_name, backingstore, backingstore_options, config_file, template_options
         end
       end
 
