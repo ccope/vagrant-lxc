@@ -62,13 +62,16 @@ module Vagrant
 
       def share_folders(folders)
         folders.each do |folder|
-          guestpath = rootfs_path.join(folder[:guestpath].gsub(/^\//, ''))
-          unless guestpath.directory?
-            begin
-              @logger.debug("Guest path doesn't exist, creating: #{guestpath}")
-              @sudo_wrapper.run('mkdir', '-p', guestpath.to_s)
-            rescue Errno::EACCES
-              raise Vagrant::Errors::SharedFolderCreateFailed, :path => guestpath.to_s
+          guestpath = folder[:guestpath].gsub(/^\//, '')
+          if @backingstore == "none"
+            absoluteguestpath = rootfs_path.join(guestpath)
+            unless absoluteguestpath.directory?
+              begin
+                @logger.debug("Guest path doesn't exist, creating: #{absoluteguestpath}")
+                @sudo_wrapper.run('mkdir', '-p', absoluteguestpath.to_s)
+              rescue Errno::EACCES
+                raise Vagrant::Errors::SharedFolderCreateFailed, :path => absoluteguestpath.to_s
+              end
             end
           end
 
