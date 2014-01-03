@@ -21,7 +21,13 @@ module Vagrant
       # A String that sets a static name
       attr_accessor :static_name
 
+      # A String that names the container to clone from
+      def clone_container_from(name)
+        @existing_container_name = name
+      end
+
       def initialize
+        @existing_container_name = UNSET_VALUE
         @customizations = []
         @backingstore_options = []
         @sudo_wrapper   = UNSET_VALUE
@@ -53,6 +59,7 @@ module Vagrant
         @sudo_wrapper = nil if @sudo_wrapper == UNSET_VALUE
         @static_name = nil if @static_name == UNSET_VALUE
         @backingstore = "none" if @backingstore == UNSET_VALUE
+        @existing_container_name = nil if @existing_container_name == UNSET_VALUE
       end
 
       def validate(machine)

@@ -60,6 +60,12 @@ module Vagrant
         end
       end
 
+      def clone(existing_container_name, name)
+        @cli.name = name
+        @logger.debug "Cloning container..."
+        @cli.clone(existing_container_name, name)
+      end
+
       def share_folders(folders)
         folders.each do |folder|
           guestpath = folder[:guestpath].gsub(/^\//, '')
