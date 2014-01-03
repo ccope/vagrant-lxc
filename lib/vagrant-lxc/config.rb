@@ -6,6 +6,12 @@ module Vagrant
       # @return [Array]
       attr_reader :customizations
 
+      # A string that contains the backing store type used with lxc-create -B
+      attr_reader :backingstore
+
+      # Optional arguments for the backing store, such as --fssize, --fstype, ...
+      attr_reader :backingstore_options
+
       # A String that points to a file that acts as a wrapper for sudo commands.
       #
       # This allows us to have a single entry when whitelisting NOPASSWD commands
@@ -17,8 +23,10 @@ module Vagrant
 
       def initialize
         @customizations = []
+        @backingstore_options = []
         @sudo_wrapper   = UNSET_VALUE
         @static_name = UNSET_VALUE
+        @backingstore = UNSET_VALUE
       end
 
       # Customize the container by calling `lxc-start` with the given
@@ -36,9 +44,15 @@ module Vagrant
         @customizations << [key, value]
       end
 
+      # Stores options for backingstores like lvm, btrfs, etc
+      def backingstore_option(key, value)
+        @backingstore_options << [key, value]
+      end
+
       def finalize!
         @sudo_wrapper = nil if @sudo_wrapper == UNSET_VALUE
         @static_name = nil if @static_name == UNSET_VALUE
+        @backingstore = "none" if @backingstore == UNSET_VALUE
       end
 
       def validate(machine)
