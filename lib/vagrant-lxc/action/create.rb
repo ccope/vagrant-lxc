@@ -17,10 +17,6 @@ module Vagrant
             container_name << "-#{Time.now.to_i}"
           end
 
-          container_name = "#{env[:root_path].basename}_#{env[:machine].name}"
-          container_name.gsub!(/[^-a-z0-9_]/i, "")
-          container_name << "-#{Time.now.to_i}"
-
           if config.existing_container_name
             env[:machine].provider.driver.clone(config.existing_container_name, container_name)
           else
