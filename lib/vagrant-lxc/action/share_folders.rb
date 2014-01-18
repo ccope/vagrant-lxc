@@ -32,7 +32,7 @@ module Vagrant
           shared_folders.each do |id, options|
             hostpath = Pathname.new(options[:hostpath]).expand_path(@env[:root_path])
 
-            if !hostpath.directory? && options[:create]
+            if !hostpath.directory? && options[:create] && env[:machine].backingstore == "none"
               # Host path doesn't exist, so let's create it.
               @logger.debug("Host path doesn't exist, creating: #{hostpath}")
 

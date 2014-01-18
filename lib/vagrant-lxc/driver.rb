@@ -17,18 +17,16 @@ module Vagrant
       CONTAINERS_PATH = '/var/lib/lxc'
 
       attr_reader :container_name,
-                  :customizations,
-                  :backingstore,
-                  :backingstore_options
+                  :customizations
 
-      def initialize(container_name, sudo_wrapper, cli = nil)
+      def initialize(container_name, sudo_wrapper, options={}) 
         @container_name       = container_name
         @sudo_wrapper         = sudo_wrapper
-        @cli                  = cli || CLI.new(sudo_wrapper, container_name)
+        @cli                  = options.fetch(:cli) { CLI.new(sudo_wrapper, container_name) }
         @logger               = Log4r::Logger.new("vagrant::provider::lxc::driver")
         @customizations       = []
-        @backingstore        = "none"
-        @backingstore_options = []
+        @backingstore         = options.fetch(:backingstore) { 'none' }
+
       end
 
       def validate!
@@ -69,15 +67,13 @@ module Vagrant
       def share_folders(folders)
         folders.each do |folder|
           guestpath = folder[:guestpath].gsub(/^\//, '')
-          if @backingstore == "none"
-            absoluteguestpath = rootfs_path.join(guestpath)
-            unless absoluteguestpath.directory?
-              begin
-                @logger.debug("Guest path doesn't exist, creating: #{absoluteguestpath}")
-                @sudo_wrapper.run('mkdir', '-p', absoluteguestpath.to_s)
-              rescue Errno::EACCES
-                raise Vagrant::Errors::SharedFolderCreateFailed, :path => absoluteguestpath.to_s
-              end
+          absoluteguestpath = rootfs_path.join(guestpath)
+          unless absoluteguestpath.directory? || backingstore == "lvm"
+            begin
+              @logger.debug("Guest path doesn't exist, creating: #{absoluteguestpath}")
+              @sudo_wrapper.run('mkdir', '-p', absoluteguestpath.to_s)
+            rescue Errno::EACCES
+              raise Vagrant::Errors::SharedFolderCreateFailed, :path => absoluteguestpath.to_s
             end
           end
 

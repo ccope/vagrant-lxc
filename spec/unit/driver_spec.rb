@@ -6,8 +6,8 @@ require 'vagrant-lxc/driver/cli'
 
 describe Vagrant::LXC::Driver do
   describe 'container name validation' do
-    let(:unknown_container) { described_class.new('unknown', nil, cli) }
-    let(:valid_container)   { described_class.new('valid', nil, cli) }
+    let(:unknown_container) { described_class.new('unknown', nil, cli: cli) }
+    let(:valid_container)   { described_class.new('valid', nil, cli: cli) }
     let(:new_container)     { described_class.new(nil, nil) }
     let(:cli)               { instance_double('Vagrant::LXC::Driver::CLI', list: ['valid']) }
 
@@ -32,6 +32,8 @@ describe Vagrant::LXC::Driver do
 
   describe 'creation' do
     let(:name)           { 'container-name' }
+    let(:backingstore)   { 'lvm' }
+    let(:backingstore_options)   { {'--fssize' => '3G'} }
     let(:template_name)  { 'auto-assigned-template-id' }
     let(:template_path)  { '/path/to/lxc-template-from-box' }
     let(:template_opts)  { {'--some' => 'random-option'} }
@@ -43,7 +45,7 @@ describe Vagrant::LXC::Driver do
 
     before do
       subject.stub(:import_template).and_yield(template_name)
-      subject.create name, template_path, config_file, template_opts
+      subject.create name, backingstore, backingstore_options, template_path, config_file, template_opts
     end
 
     it 'sets the cli object container name' do
@@ -53,6 +55,8 @@ describe Vagrant::LXC::Driver do
     it 'creates container with the right arguments' do
       cli.should have_received(:create).with(
         template_name,
+        backingstore,
+        backingstore_options,
         config_file,
         template_opts
       )
@@ -142,7 +146,7 @@ describe Vagrant::LXC::Driver do
     let(:shared_folder)       { {guestpath: '/vagrant', hostpath: '/path/to/host/dir'} }
     let(:folders)             { [shared_folder] }
     let(:rootfs_path)         { Pathname('/path/to/rootfs') }
-    let(:expected_guest_path) { "#{rootfs_path}/vagrant" }
+    let(:expected_guest_path) { "vagrant" }
     let(:sudo_wrapper)        { instance_double('Vagrant::LXC::SudoWrapper', run: true) }
 
     subject { described_class.new('name', sudo_wrapper) }
@@ -153,7 +157,7 @@ describe Vagrant::LXC::Driver do
     end
 
     it "creates guest folder under container's rootfs" do
-      sudo_wrapper.should have_received(:run).with("mkdir", "-p", expected_guest_path)
+      sudo_wrapper.should have_received(:run).with("mkdir", "-p", rootfs_path+'/'+expected_guest_path)
     end
 
     it 'adds a mount.entry to its local customizations' do

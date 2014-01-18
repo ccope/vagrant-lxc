@@ -10,7 +10,7 @@ module Vagrant
           config = env[:machine].provider_config
 
           if config.static_name
-            container_name = env[:machine].name
+            container_name = env[:machine].name.to_s
           else
             container_name = "#{env[:root_path].basename}_#{env[:machine].name}"
             container_name.gsub!(/[^-a-z0-9_]/i, "")

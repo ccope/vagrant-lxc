@@ -7,7 +7,7 @@ module Vagrant
       attr_reader :customizations
 
       # A string that contains the backing store type used with lxc-create -B
-      attr_reader :backingstore
+      attr_accessor :backingstore
 
       # Optional arguments for the backing store, such as --fssize, --fstype, ...
       attr_reader :backingstore_options
@@ -20,6 +20,8 @@ module Vagrant
 
       # A String that sets a static name
       attr_accessor :static_name
+
+      attr_reader :existing_container_name
 
       # A String that names the container to clone from
       def clone_container_from(name)
