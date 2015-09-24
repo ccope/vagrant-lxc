@@ -1,3 +1,6 @@
+require "vagrant/util/busy"
+require "vagrant/util/subprocess"
+
 module Vagrant
   module LXC
     module Executor
@@ -14,21 +17,23 @@ module Vagrant
           @logger       = Log4r::Logger.new("vagrant::lxc::sudo_wrapper")
         end
 
-        def run(*command)
-          options = command.last.is_a?(Hash) ? command.last : {}
-          command.unshift @wrapper_path if @wrapper_path && !options[:no_wrapper]
-          execute *(['sudo', '/usr/bin/env'] + command)
+        def run(*command, **opts, &block)
+          opts = command.pop if command.last.is_a?(Hash)
+          if @wrapper_path && !opts[:no_wrapper]
+            command.unshift @wrapper_path
+          else
+            command.unshift '/usr/bin/env'
+          end
+          opts[:sudo] = true
+          execute(*command, **opts, &block)
         end
-
-        private
 
         # TODO: Review code below this line, it was pretty much a copy and
         #       paste from VirtualBox base driver and has no tests
-        def execute(*command, &block)
-          # Get the options hash if it exists
-          opts = {}
+        #       And now it has some logic from the Docker executor too.
+        def execute(*command, **opts, &block)
           opts = command.pop if command.last.is_a?(Hash)
-
+          cmd.unshift 'sudo' if opts[:sudo]
           tries = 0
           tries = 3 if opts[:retryable]
 
