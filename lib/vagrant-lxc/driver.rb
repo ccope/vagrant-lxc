@@ -21,12 +21,15 @@ module Vagrant
       attr_reader :container_name,
                   :customizations
 
-      def initialize(container_name, sudo_wrapper, cli = nil)
+      def initialize(container_name, cli = nil)
+        wrapper = Pathname.new(LXC.sudo_wrapper_path).exist? &&
+          LXC.sudo_wrapper_path || nil
         @container_name = container_name
-        @sudo_wrapper   = sudo_wrapper
-        @cli            = cli || CLI.new(sudo_wrapper, container_name)
+        @executor       = Executor::Local.new(wrapper)
+        @cli            = cli || CLI.new(@executor, container_name)
         @logger         = Log4r::Logger.new("vagrant::provider::lxc::driver")
         @customizations = []
+        @logger.debug("Found sudo wrapper : #{wrapper}") if wrapper
       end
 
       def validate!
@@ -73,7 +76,7 @@ module Vagrant
       end
 
       def config_string
-        @sudo_wrapper.run('cat', base_path.join('config').to_s)
+        @executor.run('cat', base_path.join('config').to_s)
       end
 
       def create(name, backingstore, backingstore_options, template_path, config_file, template_options = {})
@@ -143,7 +146,7 @@ module Vagrant
             'addbr',
             bridge_name
           ]
-          @sudo_wrapper.run(*cmd)
+          @executor.run(*cmd)
         end
 
         if ! bridge_has_an_ip?(bridge_name)
@@ -159,8 +162,8 @@ module Vagrant
             'dev',
             bridge_name
           ]
-          @sudo_wrapper.run(*cmd)
-          @sudo_wrapper.run('ip', 'link', 'set', bridge_name, 'up')
+          @executor.run(*cmd)
+          @executor.run('ip', 'link', 'set', bridge_name, 'up')
         end
 
         cmd = [
@@ -169,25 +172,23 @@ module Vagrant
           container_name,
           ip ||= "dhcp"
         ]
-        @sudo_wrapper.run(*cmd)
+        @executor.run(*cmd)
       end
 
       def bridge_has_an_ip?(bridge_name)
         @logger.info "Checking whether the bridge #{bridge_name} has an IP"
-        `ip -4 addr show scope global #{bridge_name}` =~ /^\s+inet ([0-9.]+)\/[0-9]+\s+/
+        @executor.execute("ip -4 addr show scope global #{bridge_name}") =~ /^\s+inet ([0-9.]+)\/[0-9]+\s+/
       end
 
       def bridge_exists?(bridge_name)
         @logger.info "Checking whether bridge #{bridge_name} exists"
-        brctl_output = `ip link | egrep -q " #{bridge_name}:"`
-        $?.to_i == 0
+        @executor.execute("ip link | egrep #{bridge_name}:").strip() != ''
       end
 
       def bridge_is_in_use?(bridge_name)
         # REFACTOR: This method is **VERY** hacky
         @logger.info "Checking if bridge #{bridge_name} is in use"
-        brctl_output = `brctl show #{bridge_name} 2>/dev/null | tail -n +2 | grep -q veth`
-        $?.to_i == 0
+        @executor.execute("brctl show #{bridge_name} 2>/dev/null | tail -n +2 | grep -q veth").strip() != ''
       end
 
       def remove_bridge(bridge_name)
@@ -199,8 +200,8 @@ module Vagrant
         return unless bridge_exists?(bridge_name)
 
         @logger.info "Removing bridge #{bridge_name}"
-        @sudo_wrapper.run('ip', 'link', 'set', bridge_name, 'down')
-        @sudo_wrapper.run('brctl', 'delbr', bridge_name)
+        @executor.run('ip', 'link', 'set', bridge_name, 'down')
+        @executor.run('brctl', 'delbr', bridge_name)
       end
 
       def version
@@ -213,12 +214,12 @@ module Vagrant
         target_path    = "#{Dir.mktmpdir}/rootfs.tar.gz"
 
         @logger.info "Compressing '#{rootfs_path}' rootfs to #{target_path}"
-        @sudo_wrapper.run('tar', '--numeric-owner', '-cvzf', target_path, '-C',
+        @executor.run('tar', '--numeric-owner', '-cvzf', target_path, '-C',
           rootfs_path.parent.to_s, "./#{rootfs_path.basename.to_s}")
 
         @logger.info "Changing rootfs tarball owner"
         user_details = Etc.getpwnam(Etc.getlogin)
-        @sudo_wrapper.run('chown', "#{user_details.uid}:#{user_details.gid}", target_path)
+        @executor.run('chown', "#{user_details.uid}:#{user_details.gid}", target_path)
 
         target_path
       end
@@ -253,12 +254,13 @@ module Vagrant
       end
 
       def write_config(contents)
-        Tempfile.new('lxc-config').tap do |file|
+        # TODO: Specify the config dir somewhere (build_dir from Docker)
+        Tempfile.new('lxc-config', LXC.config_dir).tap do |file|
           file.chmod 0644
           file.write contents
           file.close
-          @sudo_wrapper.run 'cp', '-f', file.path, base_path.join('config').to_s
-          @sudo_wrapper.run 'chown', 'root:root', base_path.join('config').to_s
+          @executor.run 'cp', '-f', file.path, base_path.join('config').to_s
+          @executor.run 'chown', 'root:root', base_path.join('config').to_s
         end
       end
     end
