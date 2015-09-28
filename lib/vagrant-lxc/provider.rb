@@ -2,7 +2,6 @@ require "log4r"
 
 require "vagrant-lxc/action"
 require "vagrant-lxc/driver"
-require "vagrant-lxc/sudo_wrapper"
 
 module Vagrant
   module LXC
@@ -25,18 +24,15 @@ module Vagrant
         machine_id_changed
       end
 
-      def sudo_wrapper
-        @shell ||= begin
-          wrapper = Pathname.new(LXC.sudo_wrapper_path).exist? &&
-            LXC.sudo_wrapper_path || nil
-          @logger.debug("Found sudo wrapper : #{wrapper}") if wrapper
-          SudoWrapper.new(wrapper)
-        end
+      # Returns the driver instance for this provider.
+      def driver(container_name)
+        return @driver if @driver
+        @driver = Driver.new(container_name)
       end
-
+ 
       def ensure_lxc_installed!
         begin
-          sudo_wrapper.run("which", "lxc-create")
+          @driver.executor.run("which", "lxc-create")
         rescue Vagrant::LXC::Errors::ExecuteError
           raise Errors::LxcNotInstalled
         end
@@ -49,7 +45,7 @@ module Vagrant
 
         begin
           @logger.debug("Instantiating the container for: #{id.inspect}")
-          @driver = Driver.new(id, self.sudo_wrapper)
+          @driver = self.driver(id)
           @driver.validate!
         rescue Driver::ContainerNotFound
           # The container doesn't exist, so we probably have a stale

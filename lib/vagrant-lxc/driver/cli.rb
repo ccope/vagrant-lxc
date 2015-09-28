@@ -8,6 +8,7 @@ module Vagrant
     class Driver
       class CLI
         attr_accessor :name
+        attr_accessor :executor
 
         class TransitionBlockNotProvided < RuntimeError; end
         class TargetStateNotReached < RuntimeError
@@ -17,9 +18,9 @@ module Vagrant
           end
         end
 
-        def initialize(sudo_wrapper, name = nil)
-          @sudo_wrapper = sudo_wrapper
+        def initialize(executor, name = nil)
           @name         = name
+          @executor     = executor
           @logger       = Log4r::Logger.new("vagrant::provider::lxc::container::cli")
         end
 
@@ -97,8 +98,9 @@ module Vagrant
             opts       = cmd.pop
             namespaces = Array(opts[:namespaces]).map(&:upcase).join('|')
 
+            # TODO: Make this work with executor
             # HACK: The wrapper script should be able to handle this
-            if @sudo_wrapper.wrapper_path
+            if @executor.wrapper_path
               namespaces = "'#{namespaces}'"
             end
 
@@ -149,7 +151,7 @@ module Vagrant
         end
 
         def support_version_command?
-          @sudo_wrapper.run('which', 'lxc-version').strip.chomp != ''
+          @executor.execute('which', 'lxc-version').strip.chomp != ''
         rescue Vagrant::LXC::Errors::ExecuteError
           return false
         end
@@ -157,7 +159,7 @@ module Vagrant
         private
 
         def run(command, *args)
-          @sudo_wrapper.run("lxc-#{command}", *args)
+          @executor.run("lxc-#{command}", *args)
         end
 
         def supports_attach_with_namespaces?

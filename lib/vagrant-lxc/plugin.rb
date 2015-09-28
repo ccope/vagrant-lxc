@@ -2,6 +2,11 @@ require 'vagrant'
 
 module Vagrant
   module LXC
+    module Executor
+      autoload :Local, File.expand_path("../executor/local", __FILE__)
+      autoload :Vagrant, File.expand_path("../executor/vagrant", __FILE__)
+    end
+
     class Plugin < Vagrant.plugin("2")
       name "vagrant-lxc"
       description <<-EOF
