@@ -19,15 +19,16 @@ module Vagrant
       def initialize(machine)
         @logger    = Log4r::Logger.new("vagrant::provider::lxc")
         @machine   = machine
+        @driver    = Driver.new(@machine.provider_config.container_name)
 
         ensure_lxc_installed!
         machine_id_changed
       end
 
       # Returns the driver instance for this provider.
-      def driver(container_name)
+      def driver()
         return @driver if @driver
-        @driver = Driver.new(container_name)
+        @driver = Driver.new(@machine.provider_config.container_name)
       end
  
       def ensure_lxc_installed!
@@ -45,7 +46,7 @@ module Vagrant
 
         begin
           @logger.debug("Instantiating the container for: #{id.inspect}")
-          @driver = self.driver(id)
+          @driver = self.driver()
           @driver.validate!
         rescue Driver::ContainerNotFound
           # The container doesn't exist, so we probably have a stale

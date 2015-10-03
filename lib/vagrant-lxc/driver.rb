@@ -19,7 +19,8 @@ module Vagrant
       DEFAULT_CONTAINERS_PATH = '/var/lib/lxc'
 
       attr_reader :container_name,
-                  :customizations
+                  :customizations,
+                  :executor
 
       def initialize(container_name, cli = nil)
         wrapper = Pathname.new(LXC.sudo_wrapper_path).exist? &&
@@ -253,9 +254,10 @@ module Vagrant
         write_config(contents)
       end
 
-      def write_config(contents)
-        # TODO: Specify the config dir somewhere (build_dir from Docker)
-        Tempfile.new('lxc-config', LXC.config_dir).tap do |file|
+      def write_config(contents, config_dir = nil)
+        # TODO: Move config_dir to LXC::Config (equivalent to build_dir from Docker)
+        # TODO: Make a config_dir a synced folder with the proxy vm
+        Tempfile.new('lxc-config', config_dir).tap do |file|
           file.chmod 0644
           file.write contents
           file.close

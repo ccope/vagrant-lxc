@@ -8,13 +8,13 @@ module Vagrant
       # locally.
       class Local
         # Include this so we can use `Subprocess` more easily.
-        include Vagrant::Util::Retryable
+        include ::Vagrant::Util::Retryable
 
         attr_reader :wrapper_path
 
         def initialize(wrapper_path = nil)
           @wrapper_path = wrapper_path
-          @logger       = Log4r::Logger.new("vagrant::lxc::sudo_wrapper")
+          @logger       = Log4r::Logger.new("vagrant::lxc::local")
         end
 
         def run(*command, **opts, &block)
@@ -33,7 +33,7 @@ module Vagrant
         #       And now it has some logic from the Docker executor too.
         def execute(*command, **opts, &block)
           opts = command.pop if command.last.is_a?(Hash)
-          cmd.unshift 'sudo' if opts[:sudo]
+          command.unshift 'sudo' if opts[:sudo]
           tries = 0
           tries = 3 if opts[:retryable]
 
@@ -77,8 +77,8 @@ module Vagrant
           # Append in the options for subprocess
           command << { :notify => [:stdout, :stderr] }
 
-          Vagrant::Util::Busy.busy(int_callback) do
-            Vagrant::Util::Subprocess.execute(*command, &block)
+          ::Vagrant::Util::Busy.busy(int_callback) do
+            ::Vagrant::Util::Subprocess.execute(*command, &block)
           end
         end
       end
