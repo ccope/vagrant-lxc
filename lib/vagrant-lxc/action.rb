@@ -1,21 +1,3 @@
-require 'vagrant-lxc/action/boot'
-require 'vagrant-lxc/action/clear_forwarded_ports'
-require 'vagrant-lxc/action/create'
-require 'vagrant-lxc/action/destroy'
-require 'vagrant-lxc/action/destroy_confirm'
-require 'vagrant-lxc/action/compress_rootfs'
-require 'vagrant-lxc/action/fetch_ip_with_lxc_attach'
-require 'vagrant-lxc/action/fetch_ip_from_dnsmasq_leases'
-require 'vagrant-lxc/action/forced_halt'
-require 'vagrant-lxc/action/forward_ports'
-require 'vagrant-lxc/action/gc_private_network_bridges'
-require 'vagrant-lxc/action/handle_box_metadata'
-require 'vagrant-lxc/action/prepare_nfs_settings'
-require 'vagrant-lxc/action/prepare_nfs_valid_ids'
-require 'vagrant-lxc/action/private_networks'
-require 'vagrant-lxc/action/setup_package_files'
-require 'vagrant-lxc/action/warn_networks'
-
 module Vagrant
   module LXC
     module Action
@@ -231,6 +213,35 @@ module Vagrant
           end
         end
       end
+
+      # The autoload farm
+      action_root = Pathname.new(File.expand_path("../action", __FILE__))
+      autoload :Boot, action_root.join('boot')
+      autoload :ClearForwardedPorts, action_root.join('clear_forwarded_ports')
+      autoload :CompareSyncedFolders, action_root.join("compare_synced_folders")
+      autoload :Create, action_root.join('create')
+      autoload :Destroy, action_root.join('destroy')
+      autoload :DestroyConfirm, action_root.join('destroy_confirm')
+      autoload :CompressRootFS, action_root.join('compress_rootfs')
+      autoload :FetchIpWithLxcAttach, action_root.join('fetch_ip_with_lxc_attach')
+      autoload :FetchIpFromDnsmasqLeases, action_root.join('fetch_ip_from_dnsmasq_leases')
+      autoload :ForcedHalt, action_root.join('forced_halt')
+      autoload :ForwardedPorts, action_root.join('forward_ports')
+      autoload :GcPrivateNetworkBridges, action_root.join('gc_private_network_bridges')
+      autoload :HandleBoxMetadata, action_root.join('handle_box_metadata')
+      autoload :HostMachine, action_root.join("host_machine")
+      autoload :HostMachineConfigDir, action_root.join("host_machine_config_dir")
+      autoload :HostMachineRequired, action_root.join("host_machine_required")
+      autoload :HostMachineSyncFolders, action_root.join("host_machine_sync_folders")
+      autoload :HostMachineSyncFoldersDisable, action_root.join("host_machine_sync_folders_disable")
+      autoload :InitState, action_root.join("init_state")
+      autoload :IsHostMachineCreated, action_root.join("is_host_machine_created")
+      autoload :PrepareNFSSettings, action_root.join('prepare_nfs_settings')
+      autoload :PrepareNFSValidIds, action_root.join('prepare_nfs_valid_ids')
+      autoload :PrivateNetworks, action_root.join('private_networks')
+      autoload :SetupPackageFiles, action_root.join('setup_package_files')
+      autoload :WarnNetworks, action_root.join('warn_networks')
+
     end
   end
 end
