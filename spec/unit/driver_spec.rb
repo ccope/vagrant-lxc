@@ -88,16 +88,16 @@ describe Vagrant::LXC::Driver do
   describe 'start' do
     let(:customizations)         { [['a', '1'], ['b', '2']] }
     let(:internal_customization) { ['internal', 'customization'] }
-    let(:sudo)                   { double(Vagrant::LXC::Executor::Local) }
+    let(:executor)                   { double(Vagrant::LXC::Executor::Local) }
     let(:cli)                    { double(Vagrant::LXC::Driver::CLI, start: true, support_config_command?: false) }
 
-    subject { described_class.new('name', cli, sudo) }
+    subject { described_class.new('name', cli, executor) }
 
     before do
-      sudo.should_receive(:run).with('cat', '/var/lib/lxc/name/config').exactly(2).times.
+      executor.should_receive(:run).with('cat', '/var/lib/lxc/name/config').exactly(2).times.
         and_return('# CONFIGURATION')
-      sudo.should_receive(:run).twice.with('cp', '-f', %r{/(run|tmp)/.*}, '/var/lib/lxc/name/config')
-      sudo.should_receive(:run).twice.with('chown', 'root:root', '/var/lib/lxc/name/config')
+      executor.should_receive(:run).twice.with('cp', '-f', %r{/(run|tmp)/.*}, '/var/lib/lxc/name/config')
+      executor.should_receive(:run).twice.with('chown', 'root:root', '/var/lib/lxc/name/config')
 
       subject.customizations << internal_customization
       subject.start(customizations)
@@ -180,10 +180,10 @@ describe Vagrant::LXC::Driver do
     let(:with_space_folder)   { {guestpath: '/tmp/with space', hostpath: '/path/with space'} }
     let(:folders)             { [shared_folder, ro_rw_folder, with_space_folder] }
     let(:expected_guest_path) { "vagrant" }
-    let(:sudo_wrapper)        { double(Vagrant::LXC::Executor::Local, run: true) }
+    let(:executor)        { double(Vagrant::LXC::Executor::Local, run: true) }
     let(:rootfs_path)         { Pathname('/path/to/rootfs') }
 
-    subject { described_class.new('name', sudo_wrapper) }
+    subject { described_class.new('name', executor) }
 
     describe "with fixed rootfs" do
       before do
@@ -230,7 +230,7 @@ describe Vagrant::LXC::Driver do
       }
 
       before do
-        subject { described_class.new('name', sudo_wrapper) }
+        subject { described_class.new('name', executor) }
         subject.stub(config_string: config_string)
         subject.share_folders(folders)
       end
@@ -260,7 +260,7 @@ describe Vagrant::LXC::Driver do
       }
 
       before do
-        subject { described_class.new('name', sudo_wrapper) }
+        subject { described_class.new('name', executor) }
         subject.stub(config_string: config_string)
         subject.share_folders(folders)
       end

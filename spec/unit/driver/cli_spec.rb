@@ -3,9 +3,9 @@ require 'unit_helper'
 require 'vagrant-lxc/driver/cli'
 
 describe Vagrant::LXC::Driver::CLI do
-  let(:sudo_wrapper) { double(Vagrant::LXC::Executor::Local, run: true, wrapper_path: nil) }
+  let(:executor) { double(Vagrant::LXC::Executor::Local, run: true, wrapper_path: nil) }
 
-  subject { described_class.new(sudo_wrapper, nil) }
+  subject { described_class.new(executor, nil) }
 
   describe 'list' do
     let(:lxc_ls_out) { "dup-container\na-container dup-container" }
@@ -87,7 +87,7 @@ describe Vagrant::LXC::Driver::CLI do
     let(:config_file)       { 'config' }
     let(:template_args)     { { '--extra-param' => 'param', '--other' => 'value' } }
 
-    subject { described_class.new(sudo_wrapper, name) }
+    subject { described_class.new(executor, name) }
 
     before do
       allow(subject).to receive(:run) { |*args| @run_args = args }
@@ -119,7 +119,7 @@ describe Vagrant::LXC::Driver::CLI do
   describe 'destroy' do
     let(:name) { 'a-container-for-destruction' }
 
-    subject { described_class.new(sudo_wrapper, name) }
+    subject { described_class.new(executor, name) }
 
     before do
       allow(subject).to receive(:run)
@@ -133,7 +133,7 @@ describe Vagrant::LXC::Driver::CLI do
 
   describe 'start' do
     let(:name) { 'a-container' }
-    subject    { described_class.new(sudo_wrapper, name) }
+    subject    { described_class.new(executor, name) }
 
     before do
       allow(subject).to receive(:run)
@@ -151,7 +151,7 @@ describe Vagrant::LXC::Driver::CLI do
 
   describe 'stop' do
     let(:name) { 'a-running-container' }
-    subject    { described_class.new(sudo_wrapper, name) }
+    subject    { described_class.new(executor, name) }
 
     before do
       allow(subject).to receive(:run)
@@ -190,7 +190,7 @@ describe Vagrant::LXC::Driver::CLI do
 
   describe 'state' do
     let(:name) { 'a-container' }
-    subject    { described_class.new(sudo_wrapper, name) }
+    subject    { described_class.new(executor, name) }
 
     before do
       allow(subject).to receive(:run).and_return("state: STOPPED\npid: 2")
@@ -215,7 +215,7 @@ describe Vagrant::LXC::Driver::CLI do
     let(:name)           { 'a-running-container' }
     let(:command)        { ['ls', 'cat /tmp/file'] }
     let(:command_output) { 'folders list' }
-    subject              { described_class.new(sudo_wrapper, name) }
+    subject              { described_class.new(executor, name) }
 
     before do
       subject.stub(run: command_output)
@@ -262,7 +262,7 @@ describe Vagrant::LXC::Driver::CLI do
 
   describe 'check for whether lxc-attach is supported' do
     let(:name) { 'a-running-container' }
-    subject    { described_class.new(sudo_wrapper, name) }
+    subject    { described_class.new(executor, name) }
 
     context 'lxc-attach is present on system' do
       before { subject.stub(run: true) }
