@@ -2,12 +2,11 @@ require 'unit_helper'
 
 require 'vagrant-lxc/driver'
 require 'vagrant-lxc/driver/cli'
-require 'vagrant-lxc/sudo_wrapper'
 
 describe Vagrant::LXC::Driver do
   describe 'container name validation' do
     let(:unknown_container) { described_class.new('unknown', nil, cli) }
-    let(:valid_container)   { described_class.new('valid', nil, cli) }
+    let(:valid_container)   { described_class.new('valid', cli) }
     let(:new_container)     { described_class.new(nil, nil) }
     let(:cli)               { double(Vagrant::LXC::Driver::CLI, list: ['valid']) }
 
@@ -41,7 +40,7 @@ describe Vagrant::LXC::Driver do
     let(:rootfs_tarball)    { '/path/to/cache/rootfs.tar.gz' }
     let(:cli)               { double(Vagrant::LXC::Driver::CLI, :create => true, :name= => true) }
 
-    subject { described_class.new(nil, nil, cli) }
+    subject { described_class.new(name, cli) }
 
     before do
       allow(subject).to receive(:import_template).and_yield(template_name)
@@ -66,7 +65,7 @@ describe Vagrant::LXC::Driver do
   describe 'destruction' do
     let(:cli) { double(Vagrant::LXC::Driver::CLI, destroy: true) }
 
-    subject { described_class.new('name', nil, cli) }
+    subject { described_class.new('name', cli) }
 
     before { subject.destroy }
 
@@ -78,7 +77,7 @@ describe Vagrant::LXC::Driver do
   describe 'supports_attach?' do
     let(:cli) { double(Vagrant::LXC::Driver::CLI, supports_attach?: true) }
 
-    subject { described_class.new('name', nil, cli) }
+    subject { described_class.new('name', cli) }
 
     it 'delegates to cli object' do
       expect(subject.supports_attach?).to be_truthy
@@ -89,10 +88,10 @@ describe Vagrant::LXC::Driver do
   describe 'start' do
     let(:customizations)         { [['a', '1'], ['b', '2']] }
     let(:internal_customization) { ['internal', 'customization'] }
+    let(:sudo)                   { double(Vagrant::LXC::Executor::Local) }
     let(:cli)                    { double(Vagrant::LXC::Driver::CLI, start: true, support_config_command?: false) }
-    let(:sudo)                   { double(Vagrant::LXC::SudoWrapper) }
 
-    subject { described_class.new('name', sudo, cli) }
+    subject { described_class.new('name', cli, sudo) }
 
     before do
       sudo.should_receive(:run).with('cat', '/var/lib/lxc/name/config').exactly(2).times.
@@ -116,7 +115,7 @@ describe Vagrant::LXC::Driver do
   describe 'halt' do
     let(:cli) { double(Vagrant::LXC::Driver::CLI, stop: true) }
 
-    subject { described_class.new('name', nil, cli) }
+    subject { described_class.new('name', cli) }
 
     before do
       allow(cli).to receive(:transition_to).and_yield(cli)
@@ -144,7 +143,7 @@ describe Vagrant::LXC::Driver do
     let(:cli_state) { :something }
     let(:cli)       { double(Vagrant::LXC::Driver::CLI, state: cli_state) }
 
-    subject { described_class.new('name', nil, cli) }
+    subject { described_class.new('name', cli) }
 
     it 'delegates to cli' do
       expect(subject.state).to eq(cli_state)
@@ -154,7 +153,7 @@ describe Vagrant::LXC::Driver do
   describe 'containers_path' do
     let(:cli) { double(Vagrant::LXC::Driver::CLI, config: cli_config_value, support_config_command?: cli_support_config_command_value) }
 
-    subject { described_class.new('name', nil, cli) }
+    subject { described_class.new('name', cli) }
 
     describe 'lxc version before 1.x.x' do
       let(:cli_support_config_command_value) { false }
@@ -181,7 +180,7 @@ describe Vagrant::LXC::Driver do
     let(:with_space_folder)   { {guestpath: '/tmp/with space', hostpath: '/path/with space'} }
     let(:folders)             { [shared_folder, ro_rw_folder, with_space_folder] }
     let(:expected_guest_path) { "vagrant" }
-    let(:sudo_wrapper)        { double(Vagrant::LXC::SudoWrapper, run: true) }
+    let(:sudo_wrapper)        { double(Vagrant::LXC::Executor::Local, run: true) }
     let(:rootfs_path)         { Pathname('/path/to/rootfs') }
 
     subject { described_class.new('name', sudo_wrapper) }

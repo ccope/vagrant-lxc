@@ -1,12 +1,11 @@
 require 'unit_helper'
 
-require 'vagrant-lxc/sudo_wrapper'
 require 'vagrant-lxc/driver/cli'
 
 describe Vagrant::LXC::Driver::CLI do
-  let(:sudo_wrapper) { double(Vagrant::LXC::SudoWrapper, run: true, wrapper_path: nil) }
+  let(:sudo_wrapper) { double(Vagrant::LXC::Executor::Local, run: true, wrapper_path: nil) }
 
-  subject { described_class.new(sudo_wrapper) }
+  subject { described_class.new(sudo_wrapper, nil) }
 
   describe 'list' do
     let(:lxc_ls_out) { "dup-container\na-container dup-container" }

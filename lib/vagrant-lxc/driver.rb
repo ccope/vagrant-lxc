@@ -22,11 +22,11 @@ module Vagrant
                   :customizations,
                   :executor
 
-      def initialize(container_name, cli = nil)
+      def initialize(container_name, cli = nil, executor = nil)
         wrapper = Pathname.new(LXC.sudo_wrapper_path).exist? &&
           LXC.sudo_wrapper_path || nil
         @container_name = container_name
-        @executor       = Executor::Local.new(wrapper)
+        @executor       = executor || Executor::Local.new(wrapper)
         @cli            = cli || CLI.new(@executor, container_name)
         @logger         = Log4r::Logger.new("vagrant::provider::lxc::driver")
         @customizations = []
