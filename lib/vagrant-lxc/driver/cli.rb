@@ -47,11 +47,17 @@ module Vagrant
           end
         end
 
-        def state
-          if @name && run(:info, '--name', @name, retryable: true) =~ /^state:[^A-Z]+([A-Z]+)$/i
-            $1.downcase.to_sym
-          elsif @name
-            :unknown
+        def state(container_name=nil)
+          # TODO: Check if there are calls to this without the argument)
+          @name = container_name ? container_name : @name
+          return :not_created if not (@name and run(:ls) =~ /^#{Regexp.escape @name}$/)
+          info = run(:info, '--name', @name, retryable: true)
+          if info =~ /^state:[^A-Z]+([A-Z]+)$/i
+            state = $1
+            # Possible states: "STARTING", "RUNNING", "STOPPING", "STOPPED", "ABORTING", "FREEZING", "FROZEN", "THAWED"
+            return state.downcase.to_sym if ["RUNNING", "STOPPED"].include? state
+          else
+            return :unknown
           end
         end
 

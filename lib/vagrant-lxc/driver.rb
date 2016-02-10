@@ -225,15 +225,13 @@ module Vagrant
         target_path
       end
 
-      def state
-        if @container_name
-          @cli.state
-        end
+      def state(container_name)
+        @cli.state(container_name)
       end
 
       def prune_customizations
         # Use sed to just strip out the block of code which was inserted by Vagrant
-        @logger.debug 'Prunning vagrant-lxc customizations'
+        @logger.debug 'Pruning vagrant-lxc customizations'
         contents = config_string
         contents.gsub! /^# VAGRANT-BEGIN(.|\s)*# VAGRANT-END\n/, ''
         write_config(contents)
