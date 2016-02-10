@@ -5,7 +5,7 @@ require 'vagrant-lxc/driver/cli'
 describe Vagrant::LXC::Driver::CLI do
   let(:executor) { double(Vagrant::LXC::Executor::Local, run: true, wrapper_path: nil) }
 
-  subject { described_class.new(executor, nil) }
+  subject { described_class.new(executor) }
 
   describe 'list' do
     let(:lxc_ls_out) { "dup-container\na-container dup-container" }
@@ -80,28 +80,30 @@ describe Vagrant::LXC::Driver::CLI do
   end
 
   describe 'create' do
-    let(:template)          { 'quantal-64' }
-    let(:name)              { 'quantal-container' }
-    let(:backingstore)      { 'btrfs' }
-    let(:backingstore_opts) { [['--dir', '/tmp/foo'], ['--foo', 'bar']] }
-    let(:config_file)       { 'config' }
-    let(:template_args)     { { '--extra-param' => 'param', '--other' => 'value' } }
+    let(:params) { {
+      template:          'quantal-64',
+      name:              'quantal-container',
+      backingstore:      'btrfs',
+      backingstore_opts: [['--dir', '/tmp/foo'], ['--foo', 'bar']],
+      config_file:       'config',
+      template_args:     { '--extra-param' => 'param', '--other' => 'value' },
+    } }
 
-    subject { described_class.new(executor, name) }
+    subject { described_class.new(executor) }
 
     before do
       allow(subject).to receive(:run) { |*args| @run_args = args }
     end
 
     it 'issues a lxc-create with provided template, container name and hash of arguments' do
-      subject.create(template, backingstore, backingstore_opts, config_file, template_args)
+      subject.create(params)
       expect(subject).to have_received(:run).with(
         :create,
-        '-B',         backingstore,
-        '--template', template,
-        '--name',     name,
-        *(backingstore_opts.flatten),
-        '-f',         config_file,
+        '-B',         params[:backingstore],
+        '--template', params[:template],
+        '--name',     params[:name],
+        *(params[:backingstore_opts].flatten),
+        '-f',         params[:config_file],
         '--',
         '--extra-param', 'param',
         '--other',       'value'
@@ -111,7 +113,7 @@ describe Vagrant::LXC::Driver::CLI do
     it 'wraps a low level error into something more meaningful in case the container already exists' do
       allow(subject).to receive(:run) { raise Vagrant::LXC::Errors::ExecuteError, stderr: 'alreAdy Exists' }
       expect {
-        subject.create(template, backingstore, backingstore_opts, config_file, template_args)
+        subject.create(params)
       }.to raise_error(Vagrant::LXC::Errors::ContainerAlreadyExists)
     end
   end
@@ -119,7 +121,7 @@ describe Vagrant::LXC::Driver::CLI do
   describe 'destroy' do
     let(:name) { 'a-container-for-destruction' }
 
-    subject { described_class.new(executor, name) }
+    subject { described_class.new(executor) }
 
     before do
       allow(subject).to receive(:run)
@@ -193,7 +195,8 @@ describe Vagrant::LXC::Driver::CLI do
     subject    { described_class.new(executor, name) }
 
     before do
-      allow(subject).to receive(:run).and_return("state: STOPPED\npid: 2")
+      allow(subject).to receive(:run).with(:ls).and_return("#{name}\n")
+      allow(subject).to receive(:run).with(:info, anything, anything, anything).and_return("state: STOPPED\npid: 2")
     end
 
     it 'calls lxc-info with the right arguments' do
@@ -206,8 +209,8 @@ describe Vagrant::LXC::Driver::CLI do
     end
 
     it 'is not case sensitive' do
-      allow(subject).to receive(:run).and_return("StatE: STarTED\npid: 2")
-      expect(subject.state).to eq(:started)
+      allow(subject).to receive(:run).with(:info, anything, anything, anything).and_return("StatE: STarTING\npid: 2")
+      expect(subject.state).to eq(:starting)
     end
   end
 

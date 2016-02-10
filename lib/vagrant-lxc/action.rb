@@ -83,14 +83,27 @@ module Vagrant
       # container, configuring metadata, and booting.
       def self.action_up
         Builder.new.tap do |b|
-          b.use Builtin::ConfigValidate
           b.use Builtin::Call, Builtin::IsState, :not_created do |env, b2|
             # If the VM is NOT created yet, then do the setup steps
+            if env[:result]
+              b2.use Builtin::HandleBox
+            end
+
+          b.use Builtin::ConfigValidate
+          b.use HostMachine
+
+          # Yeah, this is supposed to be here twice (once more above). This
+          # catches the case when the container was supposed to be created,
+          # but the host state was unknown, and now we know its not actually
+          # created.
+          b.use Call, IsState, :not_created do |env, b2|
             if env[:result]
               b2.use Builtin::HandleBox
               b2.use HandleBoxMetadata
               b2.use Create
             end
+          end
+
           end
           b.use action_start
         end

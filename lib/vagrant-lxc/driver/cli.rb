@@ -7,7 +7,6 @@ module Vagrant
   module LXC
     class Driver
       class CLI
-        attr_accessor :name
         attr_accessor :executor
 
         class TransitionBlockNotProvided < RuntimeError; end
@@ -18,8 +17,7 @@ module Vagrant
           end
         end
 
-        def initialize(executor, name = nil)
-          @name         = name
+        def initialize(executor)
           @executor     = executor
           @logger       = Log4r::Logger.new("vagrant::provider::lxc::container::cli")
         end
@@ -47,57 +45,56 @@ module Vagrant
           end
         end
 
-        def state(container_name=nil)
+        def state(name)
           # TODO: Check if there are calls to this without the argument)
-          @name = container_name ? container_name : @name
-          return :not_created if not (@name and run(:ls) =~ /^#{Regexp.escape @name}$/)
-          info = run(:info, '--name', @name, retryable: true)
+          return :not_created if not (name and list.include? name)
+          info = run(:info, '--name', name, retryable: true)
           if info =~ /^state:[^A-Z]+([A-Z]+)$/i
-            state = $1
+            state = $1.downcase
             # Possible states: "STARTING", "RUNNING", "STOPPING", "STOPPED", "ABORTING", "FREEZING", "FROZEN", "THAWED"
-            return state.downcase.to_sym if ["RUNNING", "STOPPED"].include? state
+            return state.to_sym if ["RUNNING", "STOPPED", "STARTING", "STOPPING"].map { |s| s.downcase }.include? state
           else
             return :unknown
           end
         end
 
-        def create(template, backingstore, backingstore_options, config_file, template_opts = {})
-          if config_file
-            config_opts = ['-f', config_file]
+        def create(params)
+          if params[:config_file]
+            config_opts = ['-f', params[:config_file]]
           end
 
-          extra = template_opts.to_a.flatten
+          extra = params[:template_opts].to_a.flatten
           extra.unshift '--' unless extra.empty?
 
           run :create,
-              '-B', backingstore,
-              '--template', template,
-              '--name',     @name,
-              *(backingstore_options.to_a.flatten),
+              '-B',         params[:backingstore],
+              '--template', params[:template],
+              '--name',     params[:name],
+              *(params[:backingstore_options].to_a.flatten),
               *(config_opts),
               *extra
         rescue Errors::ExecuteError => e
           if e.stderr =~ /already exists/i
-            raise Errors::ContainerAlreadyExists, name: @name
+            raise Errors::ContainerAlreadyExists, name: params[:name]
           else
             raise
           end
         end
 
-        def destroy
-          run :destroy, '--name', @name
+        def destroy(name)
+          run :destroy, '--name', name
         end
 
-        def start(options = [])
-          run :start, '-d', '--name', @name, *Array(options)
+        def start(name, options = [])
+          run :start, '-d', '--name', name, *Array(options)
         end
 
-        def stop
-          attach '/sbin/halt' if supports_attach?
-          run :stop, '--name', @name
+        def stop(name)
+          attach(name, '/sbin/halt') if supports_attach?
+          run :stop, '--name', name
         end
 
-        def attach(*cmd)
+        def attach(name, *cmd)
           cmd = ['--'] + cmd
 
           if cmd.last.is_a?(Hash)
@@ -119,15 +116,15 @@ module Vagrant
             end
           end
 
-          run :attach, '--name', @name, *((extra || []) + cmd)
+          run :attach, '--name', name, *((extra || []) + cmd)
         end
 
-        def transition_to(target_state, tries = 30, timeout = 1, &block)
+        def transition_to(name, target_state, tries = 30, timeout = 1, &block)
           raise TransitionBlockNotProvided unless block_given?
 
           yield self
 
-          while (last_state = self.state) != target_state && tries > 0
+          while (last_state = state(name)) != target_state && tries > 0
             @logger.debug "Target state '#{target_state}' not reached, currently on '#{last_state}'"
             sleep timeout
             tries -= 1
@@ -139,11 +136,11 @@ module Vagrant
           end
         end
 
-        def supports_attach?
+        def supports_attach?(name)
           unless defined?(@supports_attach)
             begin
               @supports_attach = true
-              run(:attach, '--name', @name, '--', '/bin/true')
+              run(:attach, '--name', name, '--', '/bin/true')
             rescue LXC::Errors::ExecuteError
               @supports_attach = false
             end

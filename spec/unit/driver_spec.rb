@@ -30,35 +30,27 @@ describe Vagrant::LXC::Driver do
   end
 
   describe 'creation' do
-    let(:name)              { 'container-name' }
-    let(:backingstore)      { 'btrfs' }
-    let(:backingstore_opts) { [['--dir', '/tmp/foo'], ['--foo', 'bar']] }
-    let(:template_name)     { 'auto-assigned-template-id' }
-    let(:template_path)     { '/path/to/lxc-template-from-box' }
-    let(:template_opts)     { {'--some' => 'random-option'} }
-    let(:config_file)       { '/path/to/lxc-config-from-box' }
-    let(:rootfs_tarball)    { '/path/to/cache/rootfs.tar.gz' }
-    let(:cli)               { double(Vagrant::LXC::Driver::CLI, :create => true, :name= => true) }
+    let(:params) { {
+      name:              'container-name',
+      backingstore:      'btrfs',
+      backingstore_opts: [['--dir', '/tmp/foo'], ['--foo', 'bar']],
+      template_name:     'auto-assigned-template-id',
+      template_path:     '/path/to/lxc-template-from-box',
+      template_opts:     {'--some' => 'random-option'},
+      config_file:       '/path/to/lxc-config-from-box',
+      rootfs_tarball:    '/path/to/cache/rootfs.tar.gz',
+      cli:               double(Vagrant::LXC::Driver::CLI, :create => true, :name= => true),
+    } }
 
-    subject { described_class.new(name, cli) }
+    subject { described_class.new(params[:name], params[:cli]) }
 
     before do
-      allow(subject).to receive(:import_template).and_yield(template_name)
-      subject.create name, backingstore, backingstore_opts, template_path, config_file, template_opts
-    end
-
-    it 'sets the cli object container name' do
-      expect(cli).to have_received(:name=).with(name)
+      allow(subject).to receive(:import_template).and_yield(params[:template_name])
+      subject.create { params }
     end
 
     it 'creates container with the right arguments' do
-      expect(cli).to have_received(:create).with(
-        template_path,
-        backingstore,
-        backingstore_opts,
-        config_file,
-        template_opts
-      )
+      expect(cli).to have_received(:create).with(params)
     end
   end
 
@@ -123,7 +115,7 @@ describe Vagrant::LXC::Driver do
 
     it 'delegates to cli stop' do
       expect(cli).to receive(:stop)
-      subject.forced_halt
+      subject.forced_halt('name')
     end
 
     it 'expects a transition to running state to take place' do
@@ -146,7 +138,7 @@ describe Vagrant::LXC::Driver do
     subject { described_class.new('name', cli) }
 
     it 'delegates to cli' do
-      expect(subject.state).to eq(cli_state)
+      expect(subject.state('foo')).to eq(cli_state)
     end
   end
 

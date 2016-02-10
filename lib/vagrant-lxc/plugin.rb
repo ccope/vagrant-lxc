@@ -28,6 +28,12 @@ module Vagrant
         Command::Root
       end
 
+      communicator(:lxc_hostvm) do
+        require_relative "communicator"
+        init!
+        Communicator
+      end
+
       config(:lxc, :provider) do
         require File.expand_path("../config", __FILE__)
         Config

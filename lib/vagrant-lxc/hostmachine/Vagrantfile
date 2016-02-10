@@ -1,0 +1,4 @@
+Vagrant.configure("2") do |config|
+  # TODO find/make an actual box
+  config.vm.box = "coreos?/boot2lxc"
+end

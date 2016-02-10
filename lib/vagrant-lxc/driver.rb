@@ -27,7 +27,7 @@ module Vagrant
           LXC.sudo_wrapper_path || nil
         @container_name = container_name
         @executor       = executor || Executor::Local.new(wrapper)
-        @cli            = cli || CLI.new(@executor, container_name)
+        @cli            = cli || CLI.new(@executor)
         @logger         = Log4r::Logger.new("vagrant::provider::lxc::driver")
         @customizations = []
         @logger.debug("Found sudo wrapper : #{wrapper}") if wrapper
@@ -80,11 +80,9 @@ module Vagrant
         @executor.run('cat', base_path.join('config').to_s)
       end
 
-      def create(name, backingstore, backingstore_options, template_path, config_file, template_options = {})
-        @cli.name = @container_name = name
-
+      def create(params)
         @logger.debug "Creating container..."
-        @cli.create template_path, backingstore, backingstore_options, config_file, template_options
+        @cli.create params
       end
 
       def share_folders(folders)
@@ -100,7 +98,7 @@ module Vagrant
         @customizations << ['mount.entry', "#{host_path} #{guest_path} none #{mount_options.join(',')} 0 0"]
       end
 
-      def start(customizations)
+      def start(name, customizations)
         @logger.info('Starting container...')
 
         if ENV['LXC_START_LOG_FILE']
@@ -110,24 +108,24 @@ module Vagrant
         prune_customizations
         write_customizations(customizations + @customizations)
 
-        @cli.start(extra)
+        @cli.start(name, extra)
       end
 
-      def forced_halt
+      def forced_halt(name)
         @logger.info('Shutting down container...')
-        @cli.transition_to(:stopped) { |c| c.stop }
+        @cli.transition_to(name, :stopped) { |c| c.stop }
       end
 
-      def destroy
-        @cli.destroy
+      def destroy(name)
+        @cli.destroy(name)
       end
 
-      def supports_attach?
-        @cli.supports_attach?
+      def supports_attach?(name)
+        @cli.supports_attach?(name)
       end
 
-      def attach(*command)
-        @cli.attach(*command)
+      def attach(name, *command)
+        @cli.attach(name, *command)
       end
 
       def configure_private_network(bridge_name, bridge_ip, container_name, address_type, ip)
